@@ -1,0 +1,23 @@
+{
+  "name": "byofreedom-builder-v1",
+  "version": 1,
+  "enabled": false,
+  "description": "Builder intentionally disabled until supported isolated publication tooling is verified.",
+  "steps": [
+    {
+      "name": "Check isolated publication capability",
+      "type": "code",
+      "function": "byofreedom.builderGate.v1",
+      "description": "Reject activation rather than run untrusted content on a trusted host.",
+      "display": {
+        "out": [
+          {
+            "label": "Activation",
+            "path": "$.status",
+            "format": "text"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+{
+  "name": "byofreedom-interview-v5",
+  "version": 5,
+  "enabled": true,
+  "description": "Actual native Claude interview session with default-deny scoped public web/image tools, complete cited designs and private attachment read authority. Requires reviewed scoped-interview platform activation.",
+  "steps": [
+    {
+      "name": "Prepare scoped interview",
+      "type": "code",
+      "function": "byofreedom.prepareInterview.v5",
+      "input": {
+        "pick": {
+          "job": "$.job"
+        }
+      },
+      "assign": "$.nativeRequest",
+      "description": "Preserve current saved design, participant history and brand; pin source IDs and private image metadata.",
+      "display": {
+        "out": [
+          {
+            "label": "Sources",
+            "path": "$.scopedInterview.sources",
+            "format": "records"
+          },
+          {
+            "label": "Reference images",
+            "path": "$.scopedInterview.attachments",
+            "format": "records"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Interview with source and image tools",
+      "type": "code",
+      "function": "session.scopedInterviewTurn.v1",
+      "input": {
+        "pick": {
+          "agent": "$.nativeRequest.agent",
+          "executionProfile": "$.nativeRequest.executionProfile",
+          "conversationKey": "$.nativeRequest.conversationKey",
+          "requestId": "$.nativeRequest.requestId",
+          "projectId": "$.nativeRequest.projectId",
+          "durationMs": "$.nativeRequest.durationMs",
+          "prompt": "$.nativeRequest.prompt",
+          "scopedInterview": "$.nativeRequest.scopedInterview"
+        }
+      },
+      "assign": "$.turn",
+      "description": "Await real native completion in the reviewed scoped-interview profile; two bounded web/image reads, no host or broker tools.",
+      "display": {
+        "out": [
+          {
+            "label": "Status",
+            "path": "$.status",
+            "format": "text"
+          },
+          {
+            "label": "Sources inspected",
+            "path": "$.output.sourceReceipts",
+            "format": "records"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Validate complete cited design",
+      "type": "code",
+      "function": "byofreedom.finishInterview.v4",
+      "input": {
+        "pick": {
+          "turn": "$.turn",
+          "priorSourceReceipts": "$.job.context.priorSourceReceipts",
+          "expectedAttachments": "$.job.context.attachments"
+        }
+      },
+      "description": "Require native scoped completion, full design JSON and actual fetched-source citations before normal signed callback.",
+      "display": {
+        "out": [
+          {
+            "label": "Design title",
+            "path": "$.snapshot.title",
+            "format": "text"
+          },
+          {
+            "label": "Reply",
+            "path": "$.response",
+            "format": "text"
+          },
+          {
+            "label": "Sources inspected",
+            "path": "$.research.receipts",
+            "format": "records"
+          }
+        ]
+      }
+    }
+  ]
+}

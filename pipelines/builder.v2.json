@@ -1,0 +1,87 @@
+{
+  "name": "byofreedom-builder-v2",
+  "version": 2,
+  "enabled": true,
+  "input": {
+    "settings": {
+      "publicOrigin": "https://byo-freedom.b.otherstuff.ai"
+    }
+  },
+  "description": "Operator-controlled admin native implementation. Explicit publication tool; generated file validation isolated, residual native host access accepted by manager.",
+  "steps": [
+    {
+      "name": "Prepare pinned implementation",
+      "type": "code",
+      "function": "byofreedom.prepareBuilder.v2",
+      "input": {
+        "pick": {
+          "job": "$.job"
+        }
+      },
+      "assign": "$.nativeRequest",
+      "description": "Pin exact selected snapshot and starting version into dedicated admin workdir.",
+      "display": {
+        "out": [
+          {
+            "label": "Conversation",
+            "path": "$.conversationKey",
+            "format": "text"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Implement with admin",
+      "type": "code",
+      "function": "session.completedTurn",
+      "agentTools": {
+        "byofreedom.publish": "byofreedom.agentPublish.v2"
+      },
+      "input": {
+        "pick": {
+          "conversationKey": "$.nativeRequest.conversationKey",
+          "requestId": "$.nativeRequest.requestId",
+          "projectId": "$.nativeRequest.projectId",
+          "directory": "$.nativeRequest.directory",
+          "prompt": "$.nativeRequest.prompt"
+        }
+      },
+      "assign": "$.turn",
+      "description": "Native independent implementation conversation with scoped explicit publication.",
+      "display": {
+        "out": [
+          {
+            "label": "Reply",
+            "path": "$.reply",
+            "format": "text"
+          },
+          {
+            "label": "Status",
+            "path": "$.status",
+            "format": "text"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Return conversational final",
+      "type": "code",
+      "function": "byofreedom.finishBuilder.v2",
+      "input": {
+        "pick": {
+          "turn": "$.turn"
+        }
+      },
+      "description": "The reply is independent of tool publication receipts.",
+      "display": {
+        "out": [
+          {
+            "label": "Reply",
+            "path": "$.response",
+            "format": "text"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "enabled": true,
+  "description": "BYO Freedom design interview using enforced isolated native continuity; requires reviewed runtime activation.",
+  "steps": [
+    {
+      "name": "Prepare interview",
+      "type": "code",
+      "function": "byofreedom.prepareInterview.v1",
+      "input": {
+        "pick": {
+          "job": "$.job"
+        }
+      },
+      "assign": "$.nativeRequest",
+      "description": "Use exact saved design and participant turn; select enforced isolation.",
+      "display": {
+        "in": [
+          {
+            "label": "Interview job",
+            "path": "$.job",
+            "format": "json"
+          }
+        ],
+        "out": [
+          {
+            "label": "Conversation",
+            "path": "$.conversationKey",
+            "format": "text"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Interview participant",
+      "type": "code",
+      "function": "session.completedTurn",
+      "input": {
+        "pick": {
+          "conversationKey": "$.nativeRequest.conversationKey",
+          "requestId": "$.nativeRequest.requestId",
+          "projectId": "$.nativeRequest.projectId",
+          "prompt": "$.nativeRequest.prompt",
+          "directory": "$.nativeRequest.directory",
+          "executionProfile": "$.nativeRequest.executionProfile",
+          "durationMs": "$.nativeRequest.durationMs",
+          "projectFiles": "$.nativeRequest.projectFiles"
+        }
+      },
+      "assign": "$.turn",
+      "description": "Await native completion in the enforced isolated execution profile.",
+      "display": {
+        "out": [
+          {
+            "label": "Status",
+            "path": "$.status",
+            "format": "text"
+          },
+          {
+            "label": "Sequence",
+            "path": "$.sequence",
+            "format": "count"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Validate complete design",
+      "type": "code",
+      "function": "byofreedom.finishInterview.v1",
+      "input": {
+        "pick": {
+          "turn": "$.turn"
+        }
+      },
+      "description": "Validate a complete immutable design candidate before signed callback.",
+      "display": {
+        "out": [
+          {
+            "label": "Design title",
+            "path": "$.snapshot.title",
+            "format": "text"
+          },
+          {
+            "label": "Reply",
+            "path": "$.response",
+            "format": "text"
+          }
+        ]
+      }
+    }
+  ],
+  "name": "byofreedom-interview-v1"
+}

@@ -1,0 +1,6 @@
+{
+  "name": "byo-freedom-nstack-gateway",
+  "private": true,
+  "type": "module",
+  "scripts": {"start": "bun ../scripts/nstack-gateway.ts", "build": "bun ../node_modules/typescript/bin/tsc --noEmit -p ../tsconfig.json"}
+}
