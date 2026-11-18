@@ -11,7 +11,7 @@ const packageCsp="sandbox allow-scripts allow-forms allow-downloads; default-src
 const mime=(file:string)=>file.endsWith('.html')?'text/html':file.endsWith('.js')||file.endsWith('.mjs')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.svg')?'image/svg+xml':'text/plain';
 
 export function createSiteBuilder(store:Store){
- const read=(kind:string,id:string)=>{const r=store.get(kind,id);need(r,404,'Not found');return r!;};
+ const read=(kind:string,id:string)=>{const r=store.get(kind,id);need(r&&(kind!=='project'||!r.deletedAt),404,'Not found');return r!;};
  const getDraft=(id:string)=>store.get('siteDraft',id)||{id,projectId:id,revision:0,title:read('project',id).title,layout:'simple',brand:defaultBrand(),pages:[],homePageId:null,footerLinks:[]};
  function validate(input:any,projectId:string,previous:Row):Row{
   need(input&&typeof input==='object',400,'Site draft required');const brand=input.brand;need(brand&&typeof brand==='object',400,'Brand required');
@@ -65,7 +65,7 @@ export function createSiteBuilder(store:Store){
   return `<meta http-equiv="Content-Security-Policy" content="${esc(packageCsp)}">`+rewrite('index.html',files['index.html']);
  }
  function publicResponse(path:string):Response|undefined{
-  const p=path.split('/').filter(Boolean);if(p[0]!=='sites'||!p[1])return;const pointer=store.get('sitePointer',p[1]);
+  const p=path.split('/').filter(Boolean);if(p[0]!=='sites'||!p[1])return;read('project',p[1]);const pointer=store.get('sitePointer',p[1]);
   if(p[2]&&p[2]!=='page'&&p[2]!=='releases')return; // Original contribution addresses remain unchanged.
   if(!pointer&&p[2]!=='releases'){if(p[2]==='page')throw new HttpError(404,'Site is not published');return;}
   let release:Row;let offset=2;let stable=true;
@@ -76,5 +76,25 @@ export function createSiteBuilder(store:Store){
   }
   need(!p[offset+2],404,'Page not found');return new Response(render(release,stable?null:release.id,page?.id||null),{headers:documentHeaders});
  }
- return {handleApi,publicResponse,getDraft};
+ // Publishing a contribution must update the same site that the project link opens.
+ // Copy the current release, never the unsaved draft, so unrelated edits stay private.
+ function publishArtifact(pk:string,artifactId:string,versionId:string){
+  need(ADMINS.includes(pk),403,'Admin required');
+  return store.transaction(()=>{
+   const a=read('artifact',artifactId),v=read('version',versionId);read('project',a.projectId);
+   need(v.artifactId===a.id&&Array.isArray(v.validation)&&v.validation.length,400,'Choose a tested artifact version');
+   const pointer=store.get('sitePointer',a.projectId);let siteReleaseId:string|null=null;
+   if(pointer){
+    const prior=read('siteRelease',pointer.releaseId);const belongs=(p:any)=>p.artifactVersionId===v.id;
+    const existing=prior.pages.filter(belongs);const pages=prior.pages.map((p:any)=>belongs(p)?{...p,artifactVersionId:v.id,visible:true}:p);
+    if(!existing.length){need(prior.pages.length<100,409,'Site has 100 pages; manage its pages before publishing another contribution');const base=('tool-'+a.id.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')).slice(0,70);let slug=base,n=2;while(pages.some((p:any)=>p.slug===slug))slug=base+'-'+n++;pages.push({id:crypto.randomUUID(),artifactVersionId:v.id,slug,label:prior.pages.some((p:any)=>store.get('version',p.artifactVersionId)?.artifactId===a.id)?`${a.title} · Version ${v.number}`:a.title,visible:true});}
+    if(!existing.length||existing.some((p:any)=>p.artifactVersionId!==v.id||!p.visible)){
+     const {id,createdAt,...snapshot}=prior;const release=store.add('siteRelease',{...snapshot,pages,previousReleaseId:id,publishedBy:pk,reason:'artifact-publication',artifactId:a.id});
+     store.put('sitePointer',{id:a.projectId,releaseId:release.id});siteReleaseId=release.id;
+    }else siteReleaseId=prior.id;
+   }
+   return {...store.put('artifact',{...a,publishedVersionId:v.id}),siteReleaseId};
+  });
+ }
+ return {handleApi,publicResponse,getDraft,publishArtifact};
 }

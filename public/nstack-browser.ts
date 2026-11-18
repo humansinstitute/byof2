@@ -4,7 +4,7 @@ import type {BrowserSigner} from './nstack-discovery';
 /** A public namespace label, never a service principal or signing identity. */
 export const BYO_APP_NPUB='npub1uzczf3p5c9j36hqlyqj5gzl47th3kp4yqz03y5tswkd0y7ucemhs7rf22j';
 type Api=(path:string,method?:string,body?:any,options?:{signal?:AbortSignal})=>Promise<any>;
-export type BrowserConnection={endpoint:string;workspaceId?:string;appNpub?:string;mode?:string};
+export type BrowserConnection={endpoint:string;workspaceId?:string;appNpub?:string;mode?:string;image?:{id:string;designId:string;sha256:string;bytes:number;name:string;mimeType:string}};
 export type BrowserChallenge={id:string;url:string;method:string;body?:string};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const requireValue=(ok:unknown,message:string)=>{if(!ok)throw new Error(message);};
@@ -44,8 +44,8 @@ export function validateBrowserChallenge(connection:BrowserConnection,challenge:
  const url=new URL(challenge.url);
  requireValue(url.origin===connection.endpoint&&!url.username&&!url.password&&!url.hash,'Signing request changed Tower origin');
  requireValue(typeof challenge.id==='string'&&challenge.id.length>0&&challenge.id.length<=128,'Invalid signing challenge');
- requireValue(challenge.method==='GET'||challenge.method==='POST','Unsupported Tower signing method');
- requireValue(challenge.body===undefined||typeof challenge.body==='string'&&challenge.body.length<=262144,'Invalid signing payload');
+ requireValue(challenge.method==='GET'||challenge.method==='POST'||connection.mode==='interview-images'&&challenge.method==='PUT','Unsupported Tower signing method');
+ requireValue(challenge.body===undefined||typeof challenge.body==='string'&&challenge.body.length<=(connection.mode==='interview-images'?2900000:262144),'Invalid signing payload');
  if(connection.mode==='discovery'){
   requireValue(challenge.method==='GET'&&!challenge.body,'Discovery only permits signed reads');
   if(url.pathname==='/api/v4/flightdeck-pg/workspaces'){
@@ -53,6 +53,19 @@ export function validateBrowserChallenge(connection:BrowserConnection,challenge:
    const limit=Number(url.searchParams.get('limit'));requireValue(Number.isInteger(limit)&&limit>=1&&limit<=200,'Invalid workspace list bound');
    requireValue((url.searchParams.get('cursor')||'').length<=2048,'Workspace cursor exceeds bounds');
   }else requireValue(connection.workspaceId&&uuid.test(connection.workspaceId)&&url.pathname===`/api/v4/flightdeck-pg/workspaces/${connection.workspaceId}/me`&&!url.search,'Discovery request is outside the selected workspace');
+  return challenge;
+ }
+ if(connection.mode==='interview-images'){
+  const image=connection.image;requireValue(connection.workspaceId&&uuid.test(connection.workspaceId)&&image&&/^[a-f0-9]{64}$/.test(image.sha256)&&image.bytes>0&&image.bytes<=2097152,'Invalid private image plan');
+  requireValue(!url.search,'Image storage queries are unsupported');
+  const prepare=url.pathname===`/api/v4/flightdeck-pg/workspaces/${connection.workspaceId}/storage/prepare`;
+  const object=url.pathname.match(/^\/api\/v4\/storage\/([0-9a-f-]{36})(\/complete)?$/);
+  requireValue(prepare&&challenge.method==='POST'||object&&(object[2]?challenge.method==='POST':['GET','PUT'].includes(challenge.method)),'Image signing path is outside the upload plan');
+  const body=challenge.body?JSON.parse(challenge.body):null;
+  if(prepare)requireValue(body&&Object.keys(body).sort().join(',')==='content_type,file_name,is_public,metadata,size_bytes'&&body.is_public===false&&body.content_type===image!.mimeType&&body.file_name===image!.name&&body.size_bytes===image!.bytes&&body.metadata?.purpose==='byo-interview-image'&&body.metadata?.designId===image!.designId&&body.metadata?.sha256===image!.sha256,'Image prepare changed the private attachment');
+  else if(challenge.method==='PUT')requireValue(body&&Object.keys(body).join(',')==='base64_data'&&typeof body.base64_data==='string'&&body.base64_data.length<=2796204,'Invalid bounded image upload');
+  else if(challenge.method==='POST')requireValue(body&&Object.keys(body).sort().join(',')==='sha256_hex,size_bytes'&&body.sha256_hex===image!.sha256&&body.size_bytes===image!.bytes,'Image completion changed the attachment');
+  else requireValue(!challenge.body,'Image read cannot carry a body');
   return challenge;
  }
  requireValue(connection.workspaceId&&uuid.test(connection.workspaceId)&&connection.appNpub===BYO_APP_NPUB,'Invalid selected BYO workspace namespace');
@@ -85,7 +98,7 @@ export async function runBrowserOperation(api:Api,signer:BrowserSigner,startPath
  api=(path,method,body)=>attempt.wait('Waiting for request authorization and NStack response…',()=>originalApi(path,method,body,{signal:attempt.signal}));
  signer={...signer,getPublicKey:()=>attempt.wait('Waiting for signer identity…',()=>originalSigner.getPublicKey()),signEvent:event=>attempt.wait('Approve the exact NStack request in your signer…',()=>originalSigner.signEvent(event))};
  try{
- requireValue(['/api/nstack/connect','/api/nstack/discovery-request'].includes(startPath)||/^\/api\/installed-apps\/[a-zA-Z0-9-]+\/data$/.test(startPath),'Unsupported browser storage operation');
+ requireValue(['/api/nstack/connect','/api/nstack/discovery-request'].includes(startPath)||/^\/api\/designs\/[a-zA-Z0-9-]+\/images$/.test(startPath)||/^\/api\/installed-apps\/[a-zA-Z0-9-]+\/data$/.test(startPath),'Unsupported browser storage operation');
  const actor=await signer.getPublicKey();requireValue(/^[0-9a-f]{64}$/.test(actor),'Invalid current signer');
  let response=await api(startPath,'POST',startBody);
  if(response?.done===true)return response.result;
@@ -98,10 +111,19 @@ export async function runBrowserOperation(api:Api,signer:BrowserSigner,startPath
   requireValue(expected&&['endpoint','workspaceId','appNpub','serviceNpub','workspaceOwnerNpub','workspaceServiceNpub','workspaceAppNpub','mode'].every(k=>(connection as any)?.[k]===expected[k]),'Setup response changed the selected connection');
  }
  if(startPath==='/api/nstack/discovery-request')requireValue(connection?.mode==='discovery'&&connection.endpoint===startBody?.endpoint&&response.challenge?.url===startBody.endpoint+startBody.path,'Discovery response changed the requested endpoint or path');
+ if(connection.mode==='interview-images'){
+  const bytes=Uint8Array.from(atob(startBody.base64),c=>c.charCodeAt(0));const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
+  requireValue(connection.image?.designId===startPath.split('/')[3]&&connection.image?.sha256===digest&&connection.image?.bytes===bytes.length&&connection.image?.name===startBody.name&&connection.image?.mimeType===startBody.mimeType,'Image operation changed the selected image');
+ }
+ let imageObjectPath:string|undefined;
  const pinnedConnection=JSON.stringify(connection);
  for(let step=0;step<64;step++){
   requireValue(response.operationId===operationId&&JSON.stringify(response.connection)===pinnedConnection,'Browser operation connection changed');
   const challenge=validateBrowserChallenge(connection,response.challenge);
+  if(connection.mode==='interview-images'&&new URL(challenge.url).pathname.startsWith('/api/v4/storage/')){
+   const path=new URL(challenge.url).pathname.replace(/\/complete$/,'');requireValue(!imageObjectPath||path===imageObjectPath,'Image object changed during upload');imageObjectPath=path;
+   if(challenge.method==='PUT')requireValue(JSON.parse(challenge.body!).base64_data===startBody.base64,'Image upload bytes changed');
+  }
   requireValue(await signer.getPublicKey()===actor,'Browser signer changed during operation');
   const tags=[['u',challenge.url],['method',challenge.method],['byo-challenge',challenge.id],...(challenge.body?[['payload',await sha256(challenge.body)]]:[])];
   const template={kind:27235,created_at:Math.floor(Date.now()/1000),content:'',tags};

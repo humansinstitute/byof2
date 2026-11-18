@@ -1,3 +1,4 @@
+import {storeInterviewImage} from './interview-storage';
 import {readFileSync} from 'node:fs';
 import {readNostrProfile,verifiedProfile,newestProfile} from '../public/identity';
 import {verifyPipelineCallback} from '../integration/remote-pipelines';
@@ -21,13 +22,13 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
  const siteBuilder=createSiteBuilder(store);
  const lifecycle=createDesignLifecycle(store);
  const interviewImages=createInterviewImages(store),imageAccess=createInterviewImageAccess(store,cfg.origin);
- const read=(k:string,id:string)=>{const r=store.get(k,id);need(r,404,'Not found');return r!;};
+ const read=(k:string,id:string)=>{const r=store.get(k,id);need(r,404,'Not found');const projectId=k==='project'?id:r?.projectId||(r?.designId?store.get('design',r.designId)?.projectId:null);if(projectId)need(!store.get('project',projectId)?.deletedAt,404,'Project not found');return r!;};
  const settings=()=>store.get('settings','global')||{id:'global',featuredProjectId:null,featuredUntil:null};
  const admin=(pk:string)=>need(ADMINS.includes(pk),403,'Admin required');
  const member=(pk:string,id:string)=>{const p=read('project',id);need(ADMINS.includes(pk)||store.get('membership',id+':'+pk),403,'Project membership required');return p;};
  const owner=(pk:string,id:string)=>{const d=read('design',id);member(pk,d.projectId);need(d.owner===pk||ADMINS.includes(pk),403,'This design interview belongs to its participant');return d;};
  const preview=(versionId:string)=>{let t=store.all('preview').find(t=>t.versionId===versionId&&t.expires>Date.now());if(!t)t=store.add('preview',{versionId,expires:Date.now()+15*60*1000});return `/preview/${t.id}/index.html`;};
- const versions=(a:Row)=>({...a,versions:store.all('version').filter(v=>v.artifactId===a.id).map(v=>({...v,dataEnabled:store.get('nstackInstallation',v.id)?.enabled===true,files:undefined,brandContext:undefined,outdatedBrand:(v.brandRevision??null)!==(siteBuilder.getDraft(a.projectId).brand.revision)||(v.designBrandRevision??v.brandContext?.designBrandRevision??null)!==(store.get('designBrand',a.designId)?.revision??0),previewUrl:preview(v.id),published:a.publishedVersionId===v.id}))});
+ const versions=(a:Row)=>({...a,versions:store.all('version').filter(v=>v.artifactId===a.id).map(v=>({...v,dataEnabled:store.get('nstackInstallation',v.id)?.enabled===true,files:undefined,brandContext:undefined,outdatedBrand:(v.brandRevision??null)!==(siteBuilder.getDraft(a.projectId).brand.revision)||(v.designBrandRevision??v.brandContext?.designBrandRevision??null)!==(store.get('designBrand',a.designId)?.revision??0),previewUrl:preview(v.id),published:a.publishedVersionId===v.id,sitePublished:store.get('sitePointer',a.projectId)?!!store.get('siteRelease',store.get('sitePointer',a.projectId)!.releaseId)?.pages?.some((p:any)=>p.artifactVersionId===v.id&&p.visible):a.publishedVersionId===v.id}))});
  const artifacts=(designId:string)=>store.all('artifact').filter(a=>a.designId===designId).map(versions);
  const messages=(id:string)=>store.all('message').filter(m=>m.conversationId===id);
  const jobs=(id:string)=>store.all('job').filter(m=>m.conversationId===id).map(({context,...j})=>j);
@@ -111,7 +112,7 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
    if(p[1]==='installed-apps'&&p[3]==='data'&&p.length===4&&method==='POST'){const s=nstack.getSettings();if(s.connection?.mode==='browser-user'){const binding=nstack.operationBinding(pk,id,b);return json(await browserOperations.start(pk,s.connection,()=>nstack.operate(pk,id,b),()=>{nstack.operationBinding(pk,id,b,binding);}));}return json(await nstack.operate(pk,id,b));}
    if(p[1]==='artifacts'&&p[3]==='data-installations'&&p.length===4)return json(nstack.installation(pk,id,method,b));
    if(path==='/api/me'&&method==='GET'){
-    const s=settings();if(s.featuredProjectId&&Date.parse(s.featuredUntil)>Date.now()&&store.get('project',s.featuredProjectId))store.put('membership',{id:s.featuredProjectId+':'+pk,projectId:s.featuredProjectId,pubkey:pk});
+    const s=settings();if(s.featuredProjectId&&Date.parse(s.featuredUntil)>Date.now()&&store.get('project',s.featuredProjectId)&&!store.get('project',s.featuredProjectId)?.deletedAt)store.put('membership',{id:s.featuredProjectId+':'+pk,projectId:s.featuredProjectId,pubkey:pk});
     return json({pubkey:pk,admin:ADMINS.includes(pk),profile:store.get('profile',pk)||{name:'',avatar:''},settings:s,integration:{enabled:cfg.integrationEnabled,interview:cfg.integrationEnabled?(cfg.interviewImagesEnabled?'configured-scoped-agent':'configured-tool-free'):'unconfigured',interviewImages:cfg.interviewImagesEnabled,builder:cfg.builderEnabled?'configured-admin-trusted-host':'unconfigured',hostFilesystemIsolation:false,reason:cfg.integrationEnabled?null:'The tool-free interviewer has not been connected to its managed pipeline yet'}});
    }
    if(path==='/api/profile/nostr'&&method==='GET'){
@@ -122,14 +123,15 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
    if(path==='/api/profile'&&method==='PATCH'){const name=text(b.name,100);need(!b.avatar||/^https:\/\//.test(b.avatar),400,'Avatar must use HTTPS');return json(store.put('profile',{id:pk,name,avatar:String(b.avatar||'').slice(0,2000)}));}
    if(path==='/api/settings'){admin(pk);if(method==='GET')return json(settings());if(method==='PATCH'){if(b.featuredProjectId)read('project',b.featuredProjectId);need(!b.featuredUntil||Number.isFinite(Date.parse(b.featuredUntil)));return json(store.put('settings',{id:'global',featuredProjectId:b.featuredProjectId||null,featuredUntil:b.featuredUntil||null}));}}
    if(path==='/api/projects'){
-    if(method==='GET')return json({projects:store.all('project').filter(p=>ADMINS.includes(pk)||store.get('membership',p.id+':'+pk)).map(p=>({...p,joinCode:ADMINS.includes(pk)?p.joinCode:undefined})),settings:settings()});
+    if(method==='GET')return json({projects:store.all('project').filter(p=>!p.deletedAt&&(ADMINS.includes(pk)||store.get('membership',p.id+':'+pk))).map(p=>({...p,joinCode:ADMINS.includes(pk)?p.joinCode:undefined})),settings:settings()});
     if(method==='POST'){admin(pk);return json(store.add('project',{title:text(b.title,150),description:String(b.description||''),joinCode:crypto.randomUUID().slice(0,8).toUpperCase()}),201);}
    }
-   if(path==='/api/join'&&method==='POST'){const project=store.all('project').find(p=>p.joinCode===String(b.code).trim().toUpperCase());need(project,404,'Join code not found');store.put('membership',{id:project!.id+':'+pk,projectId:project!.id,pubkey:pk});return json(project);}
+   if(path==='/api/join'&&method==='POST'){const project=store.all('project').find(p=>!p.deletedAt&&p.joinCode===String(b.code).trim().toUpperCase());need(project,404,'Join code not found');store.put('membership',{id:project!.id+':'+pk,projectId:project!.id,pubkey:pk});return json(project);}
    if(p[1]==='projects'){
     const project=member(pk,id);
     if(p[3]==='site'){admin(pk);return json(siteBuilder.handleApi(pk,id,p.slice(4),method,b));}
     if(p.length===3&&method==='GET')return json({apps:nstack.projectApps(pk,id),project:{...project,joinCode:ADMINS.includes(pk)?project.joinCode:undefined},designs:store.all('design').filter(d=>d.projectId===id&&d.owner===pk),availableDesigns:ADMINS.includes(pk)?store.all('design').filter(d=>d.projectId===id):[],implementations:ADMINS.includes(pk)?store.all('implementation').filter(i=>i.projectId===id):[],artifacts:store.all('artifact').filter(a=>a.projectId===id&&(ADMINS.includes(pk)||read('design',a.designId).owner===pk)).map(versions)});
+    if(p.length===3&&method==='DELETE'){admin(pk);return json(store.transaction(()=>{need(b.confirmTitle===project.title,400,'Type the exact project name to confirm deletion');const active=store.all('job').filter(j=>j.projectId===id&&!['complete','completed','succeeded','failed','error','cancelled','conflict','superseded'].includes(j.status));need(!active.length,409,'Wait for active agents to finish before deleting this project');store.put('project',{...project,deletedAt:new Date().toISOString(),deletedBy:pk});const s=settings();if(s.featuredProjectId===id)store.put('settings',{...s,featuredProjectId:null,featuredUntil:null});return {deleted:true,projectId:id};}));}
     if(p.length===3&&method==='PATCH'){admin(pk);return json(store.put('project',{...project,title:b.title?text(b.title,150):project.title,description:b.description??project.description,joinCode:b.joinCode?text(b.joinCode,100).toUpperCase():project.joinCode}));}
     if(p[3]==='memberships'){admin(pk);if(method==='GET')return json({memberships:store.all('membership').filter(m=>m.projectId===id)});}
     if(p[3]==='designs'&&method==='POST')return json(store.transaction(()=>{const d=store.add('design',{projectId:id,owner:pk,title:b.title?text(b.title,200):'A new freedom design',currentSnapshotId:null});store.put('conversation',{id:d.id,designId:d.id,kind:'interview',owner:pk});return d;}),201);
@@ -140,7 +142,9 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
     if(p[3]==='snapshots'&&method==='GET'){member(pk,d.projectId);need(d.owner===pk||ADMINS.includes(pk),403,'Design access denied');return json({design:d,snapshots:store.all('snapshot').filter(s=>s.designId===id),milestones:lifecycle.history(id),artifacts:artifacts(id)});}
     if(p[3]==='implementations'&&method==='POST'){admin(pk);member(pk,d.projectId);const s=read('snapshot',b.snapshotId);need(s.designId===id,400,'Snapshot does not belong to design');if(b.startingVersionId)need(read('version',b.startingVersionId).designId===id,400,'Starting artifact belongs to another design');return json(store.add('implementation',{projectId:d.projectId,designId:id,snapshotId:s.id,startingVersionId:b.startingVersionId||null,owner:pk}),201);}
     owner(pk,id);
-    if(p[3]==='images'&&p.length===4&&method==='POST'){need(cfg.interviewImagesEnabled,503,'Image interviews are not active yet');return json(interviewImages.upload(pk,id,b),201);}
+    if(p[3]==='images'&&p.length===4&&method==='POST'){need(cfg.interviewImagesEnabled,503,'Image interviews are not active yet');const image=interviewImages.upload(pk,id,b);const s=nstack.getSettings();if(s.connection?.mode!=='browser-user')return json({...image,storage:'app-private'},201);
+     const c=s.connection;const guard=()=>{owner(pk,id);need(nstack.getSettings().revision===s.revision&&JSON.stringify(nstack.getSettings().connection)===JSON.stringify(c),409,'NStack connection changed; retry image upload');};const plan={...c,mode:'interview-images' as const,image:{id:image.id,designId:id,sha256:image.sha256,bytes:image.bytes,name:image.name,mimeType:image.mimeType}};
+     return json(await browserOperations.start(pk,plan,async transport=>{const raw=store.get('interviewImage',image.id)!;const result=await storeInterviewImage(store,c,(_c,r)=>transport(plan as any,r),raw,d,pk,guard,s.revision);return {...image,...result};},guard));}
     if(p[3]==='images'&&p.length===5&&method==='GET'){const image=interviewImages.context(pk,id,[p[4]!])[0]!;return json({id:image.id,mimeType:image.mimeType,base64:image.base64,sha256:image.sha256});}
     if(p.length===3&&method==='GET')return json({design:d,snapshots:store.all('snapshot').filter(s=>s.designId===id),milestones:lifecycle.history(id),messages:messages(id),artifacts:artifacts(id),jobs:jobs(id)});
     if(p.length===3&&method==='PATCH')return json(store.transaction(()=>{need((b.expectedSnapshotId||null)===(d.currentSnapshotId||null),409,'Design changed; reload before saving');return store.put('snapshot',{...snapshot(d,text(b.title,200),text(b.document),'direct-edit'),editedBy:pk});}));
@@ -165,7 +169,7 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
     }));
     if(p[3]==='retry'&&method==='POST'){need(j.status==='failed',409,'Only failed jobs may be retried');need(!j.context?.attachmentSource||j.context.attachmentSource.expiresAt>Date.now(),409,'Image access expired. Rebase the interview to issue fresh access; the original prompt will not be resent.');return json(store.put('job',{...j,status:'queued',error:null,progress:'Retry pending; same immutable request and lineage'}));}
    }
-   if(p[1]==='artifacts'&&p[3]==='publish'&&method==='POST'){admin(pk);const a=read('artifact',id);const v=read('version',b.versionId);need(v.artifactId===a.id&&v.validation?.length,400,'Choose a tested artifact version');return json(store.put('artifact',{...a,publishedVersionId:v.id}));}
+   if(p[1]==='artifacts'&&p[3]==='publish'&&method==='POST'){admin(pk);const a=read('artifact',id);const v=read('version',b.versionId);need(v.artifactId===a.id&&v.validation?.length,400,'Choose a tested artifact version');member(pk,a.projectId);return json(siteBuilder.publishArtifact(pk,a.id,v.id));}
    if(p[1]==='worker'){
     need(cfg.workerPubkey&&pk===cfg.workerPubkey,403,'Scoped worker required');
     if(p[2]==='jobs'&&method==='GET'&&!p[3])return json({jobs:store.all('job').filter(j=>j.status==='queued')});

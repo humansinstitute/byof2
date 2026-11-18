@@ -35,3 +35,8 @@ test('layout, navigation order and visibility are frozen in release with escaped
 
 test('private preview treats a real package home anchor as navigation rather than cyclic module import',()=>{const v=store.get('version','v2')!;store.put('version',{...v,files:{...v.files,'index.html':'<a class="brand" href="index.html">Home</a><a href="index.html#result">Result</a>'+v.files['index.html']}});save();const result=call('preview','POST',{expectedRevision:1});expect(result.html).toContain('href=&quot;#&quot;');expect(result.html).toContain('href=&quot;#result&quot;');expect(result.html).toContain('data:text/javascript');});
 test('public site saved-data launcher pins the exact page version and disappears on installation revocation',async()=>{save();const first=publish();store.put('nstackInstallation',{id:'v2',enabled:true});const path=`/sites/p/releases/${first.publishedReleaseId}/page/welcome/`;const html=await site.publicResponse(path)!.text();expect(html).toContain('href="/#/apps/v2"');expect(html).not.toContain('/#/apps/v1');store.put('nstackInstallation',{id:'v2',enabled:false});expect(await site.publicResponse(path)!.text()).not.toContain('Open app to save');});
+test('contribution publication preserves deliberately pinned older versions of the same artefact',()=>{
+ save(draft('v1'));const first=publish('first','v1');const before=store.get('siteRelease',first.publishedReleaseId)!;
+ const result=site.publishArtifact(admin,'a','v2');const after=store.get('siteRelease',result.siteReleaseId!)!;
+ expect(after.pages[0]).toEqual(before.pages[0]);expect(after.pages[1].artifactVersionId).toBe('v2');expect(after.pages[1].slug).not.toBe(after.pages[0].slug);expect(after.previousReleaseId).toBe(before.id);
+});

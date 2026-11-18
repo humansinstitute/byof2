@@ -37,7 +37,7 @@ export function validateInterviewImage(input:unknown){
  return {name:(value.name as string).trim(),mimeType:value.mimeType as string,base64:bytes.toString('base64'),bytes:bytes.length,...size,sha256:createHash('sha256').update(bytes).digest('hex')};
 }
 export function createInterviewImages(store:Store){
- const assertOwner=(actor:string,designId:string)=>{const design=store.get('design',designId);need(design,404,'Design not found');need(design!.owner===actor||ADMINS.includes(actor),403,'This design interview belongs to its participant');return design!.owner as string;};
+ const assertOwner=(actor:string,designId:string)=>{const design=store.get('design',designId);need(design&&!store.get('project',design.projectId)?.deletedAt,404,'Design not found');need(design!.owner===actor||ADMINS.includes(actor),403,'This design interview belongs to its participant');return design!.owner as string;};
  const metadata=(row:Row)=>({id:row.id,name:row.name,mimeType:row.mimeType,bytes:row.bytes,width:row.width,height:row.height,sha256:row.sha256});
  function rowFor(actor:string,designId:string,id:string){const owner=assertOwner(actor,designId);const image=store.get('interviewImage',id);need(image&&image.owner===owner&&image.designId===designId,404,'Image not found');return image!;}
  function select(owner:string,designId:string,ids:unknown){

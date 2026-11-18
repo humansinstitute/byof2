@@ -1,0 +1,60 @@
+import {chromium} from '@playwright/test';
+import {generateSecretKey,getPublicKey} from 'nostr-tools';
+import {Store} from '../src/store';
+import {createApp} from '../src/app';
+import {config} from '../src/config';
+import {ADMINS} from '../src/auth';
+import {createSiteBuilder} from '../src/site-builder';
+
+// Real browser + isolated app fixture and actual signatures; no native model or hosted activation claim.
+const store=new Store(':memory:'),key=generateSecretKey(),owner=getPublicKey(key);ADMINS.push(owner);
+store.put('project',{id:'p',title:'ParkesTestTash26',description:'Building a Parkes site.',joinCode:'FIXTURE'});
+store.put('project',{id:'empty',title:'Empty workshop',description:'An isolated browser fixture.',joinCode:'EMPTY'});
+store.put('design',{id:'d',owner,projectId:'p',title:'Bitcoin Retirement Calculator (AUD/USD, CAGR sliders)',currentSnapshotId:'s'});
+store.put('snapshot',{id:'s',designId:'d',title:'Bitcoin Retirement Calculator',document:'## Confirmed facts\nBuild a retirement calculator with adjustable allocation.\n\n## Open questions\nWhich time horizon should we use?',createdAt:new Date().toISOString()});
+store.put('conversation',{id:'d',designId:'d',kind:'interview',owner});
+store.put('message',{id:'m',conversationId:'d',role:'assistant',content:'Tell me about your time horizon. You can paste an image into your reply.'});
+store.put('artifact',{id:'old',projectId:'p',designId:'older',title:'Earlier contribution',publishedVersionId:'old-v'});
+store.put('version',{id:'old-v',artifactId:'old',designId:'older',number:1,validation:['fixture'],files:{'index.html':'<h1>Earlier contribution</h1>'}});
+const site=createSiteBuilder(store),draft=site.getDraft('p');site.handleApi(owner,'p',[],'PUT',{expectedRevision:0,draft:{...draft,layout:'resource-library',pages:[{id:'old-page',slug:'earlier',label:'Earlier contribution',artifactVersionId:'old-v',visible:true}],homePageId:'old-page'}});site.handleApi(owner,'p',['publish'],'POST',{expectedRevision:1,requestId:'initial'});
+store.put('artifact',{id:'a',projectId:'p',designId:'d',title:'Retirement counter',publishedVersionId:'v'});
+store.put('version',{id:'v',artifactId:'a',designId:'d',snapshotId:'s',number:1,validation:['isolated fixture'],createdAt:new Date().toISOString(),files:{'index.html':'<button id="counter">0</button><script>counter.onclick=()=>counter.textContent=Number(counter.textContent)+1</script>'}});
+let app:ReturnType<typeof createApp>;const server=Bun.serve({hostname:'127.0.0.1',port:0,fetch:r=>app.fetch(r)}),origin=`http://127.0.0.1:${server.port}`;app=createApp(store,config({PUBLIC_ORIGIN:origin,INTERVIEW_PIPELINE_CONFIG:'fixture-no-dispatch',INTERVIEW_WORKFLOW_VERSION:'interview-v6',INTERVIEW_SCOPED_TOOLS:'1'}));
+const browser=await chromium.launch({channel:'chrome',headless:true}),checks:string[]=[];const pass=(ok:boolean,label:string)=>{if(!ok)throw Error(label);checks.push(label);};
+const evidence=process.env.BYO_BROWSER_EVIDENCE||'tmp/docs/handoffs';
+try{
+ const page=await browser.newPage({viewport:{width:1440,height:900}});const errors:string[]=[];page.on('pageerror',e=>{errors.push(e.message);console.error('BROWSER ERROR',e.stack)});
+ await page.addInitScript(k=>{if(window!==top)return;localStorage.setItem('byo-freedom.identity.v1',k);localStorage.setItem('byo-freedom.signer.v1','anonymous');},Buffer.from(key).toString('hex'));
+ await page.goto(origin+'/#/projects/empty');await page.getByText('The first step is to express what you want.').waitFor();pass(await page.getByText('An agent will guide you',{exact:false}).count()===1,'Requested empty project guidance is visible');await page.screenshot({path:evidence+'/release15-empty-desktop.png'});
+ await page.goto(origin+'/#/projects/p');await page.getByRole('link',{name:'View project site'}).waitFor();pass(await page.getByText('Your shared workshop',{exact:false}).count()===0,'Project header removes redundant label');
+ await page.setViewportSize({width:390,height:844});const title=await page.locator('.project-title-row h1').boundingBox(),link=await page.locator('.site-link').boundingBox();pass(!!title&&!!link&&Math.abs(title.y-link.y)<44,'Phone project title and prominent site link share title row');pass(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Phone project has no horizontal overflow');await page.screenshot({path:evidence+'/release15-project-phone.png'});
+ await page.goto(origin+'/#/designs/d');await page.locator('#message-input').waitFor();
+ for(const size of [{width:1440,height:900},{width:390,height:844},{width:375,height:667}]){
+  await page.setViewportSize(size);const box=await page.locator('.messages').boundingBox();pass(!!box&&box.height>=150,`${size.width}×${size.height}: useful chat height at least 150px`);pass(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&document.documentElement.scrollHeight<=innerHeight+2),`${size.width}×${size.height}: workspace fits viewport`);await page.screenshot({path:evidence+`/release15-interview-${size.width}.png`});
+ }
+ await page.setViewportSize({width:1440,height:900});
+ const png=await page.evaluate(()=>{const canvas=document.createElement('canvas');canvas.width=320;canvas.height=160;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#385447';ctx.fillRect(0,0,320,160);return canvas.toDataURL('image/png').split(',')[1]!;});
+ let releaseUpload!:()=>void;const heldUpload=new Promise<void>(resolve=>{releaseUpload=resolve;});
+ await page.route('**/api/designs/d/images',async route=>{await heldUpload;await route.continue();});
+ await page.locator('[data-image-upload]').setInputFiles({name:'pending.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});await page.getByText('Uploading private image…').waitFor();
+ await page.goto(origin+'/#/projects/p');await page.locator('.project-title-row').waitFor();await page.goto(origin+'/#/designs/d');await page.locator('#message-input').waitFor();releaseUpload();await page.getByText('Images ready. Send your message when you are ready.').waitFor();
+ pass(await page.locator('[data-remove-image]').count()===1&&!await page.locator('[data-select-image]').isDisabled(),'Navigating away and back during upload recovers draft and controls');await page.unroute('**/api/designs/d/images');await page.locator('[data-remove-image]').click();
+ await page.locator('#message-input').fill('Keep this text. ');
+ await page.evaluate(base64=>{const file=new File([Uint8Array.from(atob(base64),c=>c.charCodeAt(0))],'pasted.png',{type:'image/png'});const data=new DataTransfer();data.items.add(file);data.setData('text/plain','Mixed clipboard text.');document.querySelector<HTMLTextAreaElement>('#message-input')!.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));},png);
+ await page.getByText('Images ready. Send your message when you are ready.').waitFor();await page.waitForFunction(()=>document.querySelector<HTMLImageElement>('.image-preview img')?.naturalWidth===320);
+ pass(store.all('interviewImage').length===1,'Composer paste decodes and uploads actual private image pixels');pass((await page.locator('#message-input').inputValue()).includes('Mixed clipboard text.'),'Mixed image/text paste preserves accompanying text');
+ await page.locator('[data-preview-image]').click();await page.locator('.modal img').waitFor();await page.getByRole('button',{name:'Close dialog'}).click();
+ await page.route('**/api/designs/d/messages',r=>r.fulfill({status:503,contentType:'application/json',body:'{"error":"Fixture send unavailable"}'}));await page.locator('#message-input').press('Enter');await page.getByText('Fixture send unavailable',{exact:true}).waitFor();pass(await page.locator('[data-remove-image]').count()===1,'Failed Enter send preserves image draft and text');
+ const before=await page.locator('#message-input').inputValue();await page.locator('#message-input').press('Shift+Enter');pass((await page.locator('#message-input').inputValue()).length===before.length+1,'Shift+Enter inserts newline');
+ await page.reload();await page.locator('[data-remove-image]').waitFor();pass((await page.locator('#message-input').inputValue()).includes('Keep this text'),'Reload preserves composer and uploaded reference');
+ await page.locator('[data-remove-image]').click();pass(await page.locator('[data-remove-image]').count()===0,'Pending reference can be removed');
+ await page.setViewportSize({width:390,height:844});await page.locator('[data-image-upload]').setInputFiles({name:'mobile.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});await page.getByText('Images ready. Send your message when you are ready.').waitFor();pass(await page.locator('[data-remove-image]').count()===1,'Phone file picker fallback attaches private image');await page.screenshot({path:evidence+'/release15-paste-phone.png'});
+ await page.unroute('**/api/designs/d/messages');await page.locator('#message-input').press('Enter');await page.waitForFunction(()=>document.querySelector('[data-view-image]'));pass(store.all('job').length===1&&store.all('message').some(m=>m.imageIds?.length),'Enter submits exact reference through real signed message API');
+ await page.locator('[data-tab="preview"]').click();pass(await page.locator('.preview-panel').isVisible()&&!await page.locator('.chat-panel').isVisible(),'Phone preview tab gives document its own useful area');await page.screenshot({path:evidence+'/release15-preview-phone.png'});
+ await page.locator('[data-version-select="v"]').click();await page.getByRole('button',{name:'Add to project site',exact:true}).click();await page.getByText('Version published to the project site',{exact:true}).waitFor();pass(store.all('siteRelease').length===2,'Browser publish repairs missing contribution in successor release');
+ const publicPage=await browser.newPage({viewport:{width:390,height:844}});await publicPage.goto(origin+'/sites/p/');await publicPage.getByRole('link',{name:'Retirement counter'}).first().click();await publicPage.frameLocator('iframe').locator('#counter').click();pass(await publicPage.frameLocator('iframe').locator('#counter').textContent()==='1','Published contribution is visible and works on public phone site');await publicPage.screenshot({path:evidence+'/release15-public-phone.png'});
+ // Complete only the synthetic queued job so deletion can be tested without an active agent.
+ for(const j of store.all('job'))store.put('job',{...j,status:'complete'});
+ await page.goto(origin+'/#/projects/p');await page.getByRole('button',{name:'Edit project & join code'}).click();await page.getByRole('button',{name:'Delete project',exact:true}).click();await page.getByLabel('Project name to confirm deletion').fill('wrong');await page.getByRole('button',{name:'Delete project and site'}).click();await page.getByText('Type the exact project name to confirm deletion').waitFor();pass(!store.get('project','p')!.deletedAt,'Wrong deletion confirmation retains project');await page.getByLabel('Project name to confirm deletion').fill('ParkesTestTash26');await page.screenshot({path:evidence+'/release15-delete-phone.png'});await page.getByRole('button',{name:'Delete project and site'}).click();await page.waitForURL('**/#/projects');pass(!!store.get('project','p')!.deletedAt,'Browser confirmed deletion removes whole project');pass((await fetch(origin+'/sites/p/')).status===404,'Deleted project public site is unavailable');pass(errors.length===0,'No browser runtime errors');
+ await Bun.write(evidence+'/release15-browser-evidence.json',JSON.stringify({status:'passed',scope:'Isolated app and Chrome desktop/phone, real product signatures, no native dispatcher',checks},null,2));console.log(JSON.stringify({status:'passed',checks},null,2));
+}finally{await browser.close();await server.stop(true);ADMINS.splice(ADMINS.indexOf(owner),1);store.db.close();}

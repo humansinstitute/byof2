@@ -7,7 +7,7 @@ import {boundedNStackText,type NStackConnection,type NStackTransport,type NStack
 export const browserTransport=new AsyncLocalStorage<NStackTransport>();
 export const BYO_APP_NPUB='npub1uzczf3p5c9j36hqlyqj5gzl47th3kp4yqz03y5tswkd0y7ucemhs7rf22j';
 type Challenge={id:string;url:string;method:string;body?:string};
-export type DiscoveryConnection={endpoint:string;serviceNpub:string;mode:'discovery';workspaceId?:string;workspaceAppNpub?:string};
+export type DiscoveryConnection={endpoint:string;serviceNpub:string;mode:'discovery'|'interview-images';workspaceId?:string;workspaceAppNpub?:string};
 type Operation={id:string;actor:string;connection:NStackConnection|DiscoveryConnection;expires:number;challenge?:Challenge;resolve?:(r:Response)=>void;reject?:(e:Error)=>void;wake?:()=>void;done?:boolean;result?:any;error?:any;count:number;guard?:()=>void};
 /** Only server-generated, ACL-checked operations can request authorization. No URL or body from authorize is executed. */
 export function createBrowserOperations(fetcher:typeof fetch=publicNStackFetch){
@@ -24,8 +24,8 @@ export function createBrowserOperations(fetcher:typeof fetch=publicNStackFetch){
   const transport:NStackTransport=async(c,r)=>{
    need(JSON.stringify(c)===JSON.stringify(connection),409,'Operation connection changed');need(++o.count<=64,413,'Operation exceeds request bound');
    const root=`/api/v4/flightdeck-pg/workspaces/${c.workspaceId}`;
-   need(connection.mode==='discovery'?(r.method==='GET'&&(r.path.startsWith('/api/v4/flightdeck-pg/workspaces?')||r.path===root+'/me')):r.path===root+'/me'||r.path.startsWith(root+'/connection-proof?nonce=')||r.path.startsWith(root+`/apps/${BYO_APP_NPUB}/`),403,'Unsupported browser authority request');
-   need(['GET','POST'].includes(r.method),403,'Unsupported browser authority method');
+   need(connection.mode==='interview-images'?(r.path===root+'/storage/prepare'||/^\/api\/v4\/storage\/[0-9a-f-]{36}(?:\/complete)?$/.test(r.path)):connection.mode==='discovery'?(r.method==='GET'&&(r.path.startsWith('/api/v4/flightdeck-pg/workspaces?')||r.path===root+'/me')):r.path===root+'/me'||r.path.startsWith(root+'/connection-proof?nonce=')||r.path.startsWith(root+`/apps/${BYO_APP_NPUB}/`),403,'Unsupported browser authority request');
+   need((connection.mode==='interview-images'?['GET','POST','PUT']:['GET','POST']).includes(r.method),403,'Unsupported browser authority method');
    const body=r.body===undefined?undefined:JSON.stringify(r.body);o.challenge={id:crypto.randomUUID(),url:c.endpoint+r.path,method:r.method,...(body===undefined?{}:{body})};
    return new Promise<Response>((resolve,reject)=>{const timer=setTimeout(()=>reject(new HttpError(410,'Browser authorization timed out; retry')),120000);timer.unref?.();o.resolve=r=>{clearTimeout(timer);resolve(r)};o.reject=e=>{clearTimeout(timer);reject(e)};o.wake?.();o.wake=undefined;});
   };
