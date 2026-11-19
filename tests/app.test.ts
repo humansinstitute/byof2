@@ -239,9 +239,9 @@ describe('explicit artifact publication and lineage',()=>{
   const selected=(await call(admin,`/api/designs/${d.id}/snapshots`)).body;expect(selected.snapshots).toHaveLength(1);expect(selected.messages).toBeUndefined();
   expect((await app.fetch(new Request(origin+`/preview/${v.id}/index.html`))).status).toBe(404);
   const url=(await call(user,`/api/designs/${d.id}`)).body.artifacts[0].versions[0].previewUrl;
-  expect((await app.fetch(new Request(origin+url))).status).toBe(200);
-  expect((await app.fetch(new Request(origin+'/api/me',{headers:{referer:origin+url}}))).status).toBe(401);
-  const ticket=store.all('preview')[0];store.put('preview',{...ticket,expires:Date.now()-1});expect((await app.fetch(new Request(origin+url))).status).toBe(404);
+  expect((await app.fetch(new Request(new URL(url,origin)))).status).toBe(200);
+  expect((await app.fetch(new Request(origin+'/api/me',{headers:{referer:new URL(url,origin).href}}))).status).toBe(401);
+  const ticket=store.all('preview')[0];store.put('preview',{...ticket,expires:Date.now()-1});expect((await app.fetch(new Request(new URL(url,origin)))).status).toBe(404);
  });
  test('a second build turn in the same implementation chat starts from its exact last artifact',async()=>{
   const d=await design();const s=(await save(d.id)).body;const i=(await call(admin,`/api/designs/${d.id}/implementations`,'POST',{snapshotId:s.id})).body;

@@ -23,14 +23,14 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
  const siteBuilder=createSiteBuilder(store);
  const lifecycle=createDesignLifecycle(store);
  const sharing=createArtifactSharing(store);
- const importView=(pk:string,d:Row)=>{const reference=sharing.reference(d.id);return reference?{...reference,previewUrl:sharing.ticket(pk,d.projectId,{designId:d.id})}:null;};
+ const importView=(pk:string,d:Row)=>{const reference=sharing.reference(d.id);return reference?{...reference,previewUrl:cfg.origin+sharing.ticket(pk,d.projectId,{designId:d.id})}:null;};
  const interviewImages=createInterviewImages(store),imageAccess=createInterviewImageAccess(store,cfg.origin);
  const read=(k:string,id:string)=>{const r=store.get(k,id);need(r,404,'Not found');const projectId=k==='project'?id:r?.projectId||(r?.designId?store.get('design',r.designId)?.projectId:null);if(projectId)need(!store.get('project',projectId)?.deletedAt,404,'Project not found');return r!;};
  const settings=()=>store.get('settings','global')||{id:'global',featuredProjectId:null,featuredUntil:null};
  const admin=(pk:string)=>need(ADMINS.includes(pk),403,'Admin required');
  const member=(pk:string,id:string)=>{const p=read('project',id);need(ADMINS.includes(pk)||store.get('membership',id+':'+pk),403,'Project membership required');return p;};
  const owner=(pk:string,id:string)=>{const d=read('design',id);member(pk,d.projectId);need(d.owner===pk||ADMINS.includes(pk),403,'This design interview belongs to its participant');return d;};
- const preview=(versionId:string)=>{let t=store.all('preview').find(t=>t.versionId===versionId&&t.expires>Date.now());if(!t)t=store.add('preview',{versionId,expires:Date.now()+15*60*1000});return `/preview/${t.id}/index.html`;};
+ const preview=(versionId:string)=>{let t=store.all('preview').find(t=>t.versionId===versionId&&t.expires>Date.now());if(!t)t=store.add('preview',{versionId,expires:Date.now()+15*60*1000});return `${cfg.origin}/preview/${t.id}/index.html`;};
  const versions=(a:Row)=>({...a,versions:store.all('version').filter(v=>v.artifactId===a.id).map(v=>({...v,dataEnabled:store.get('nstackInstallation',v.id)?.enabled===true,files:undefined,brandContext:undefined,outdatedBrand:(v.brandRevision??null)!==(siteBuilder.getDraft(a.projectId).brand.revision)||(v.designBrandRevision??v.brandContext?.designBrandRevision??null)!==(store.get('designBrand',a.designId)?.revision??0),previewUrl:preview(v.id),published:a.publishedVersionId===v.id,sitePublished:store.get('sitePointer',a.projectId)?!!store.get('siteRelease',store.get('sitePointer',a.projectId)!.releaseId)?.pages?.some((p:any)=>p.artifactVersionId===v.id&&p.visible):a.publishedVersionId===v.id}))});
  const artifacts=(designId:string)=>store.all('artifact').filter(a=>a.designId===designId).map(versions);
  const messages=(id:string)=>store.all('message').filter(m=>m.conversationId===id);
@@ -80,10 +80,10 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
    if(path.startsWith('/library-preview/')&&method==='GET'){const parts=path.split('/');return sharing.preview(parts[2]!,parts.slice(3).join('/')||'index.html',cfg.origin);}
    if(path.startsWith('/preview/')||path.startsWith('/sites/'))return publicSite(path);
    if(path==='/site-preview-host'&&method==='GET')return new Response(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Private site preview</title><style>html,body,iframe{margin:0;border:0;width:100%;height:100%;display:block}</style></head><body><iframe title="Private draft site" sandbox="allow-scripts allow-forms allow-downloads"></iframe><script>addEventListener('message',event=>{if(event.source!==parent||event.data?.type!=='byo-site-preview'||typeof event.data.html!=='string')return;document.querySelector('iframe').srcdoc=event.data.html;});</script></body></html>`,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store','referrer-policy':'no-referrer','x-content-type-options':'nosniff','content-security-policy':"sandbox allow-scripts allow-forms allow-downloads; default-src 'none'; script-src 'unsafe-inline' data: blob:; style-src 'unsafe-inline' data:; img-src https: data: blob:; frame-src 'self' data: blob:; connect-src https: wss:; font-src data:; base-uri 'none'; form-action 'none'"}});
-   if(!path.startsWith('/api/')){const file=path==='/app.js'?Bun.file('dist/app.js'):path==='/style.css'?Bun.file('public/style.css'):Bun.file('dist/index.html');return new Response(file,{headers:{'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' https://blossom.primal.net wss://relay.damus.io wss://nos.lol wss://relay.primal.net; frame-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",'x-content-type-options':'nosniff','cache-control':path==='/app.js'||path==='/style.css'?'no-cache':'no-store'}});}
+   if(!path.startsWith('/api/')){const file=path==='/app.js'?Bun.file('dist/app.js'):path==='/style.css'?Bun.file('public/style.css'):Bun.file('dist/index.html');return new Response(file,{headers:{'content-security-policy':`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' https://blossom.primal.net wss://relay.damus.io wss://nos.lol wss://relay.primal.net; frame-src 'self' ${cfg.origin}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`,'x-content-type-options':'nosniff','cache-control':path==='/app.js'||path==='/style.css'?'no-cache':'no-store'}});}
    if(path==='/api/pipeline-webhook'&&method==='POST'){
     need(cfg.webhookPubkey,503,'Webhook signer not configured');
-    let verified;try{verified=await verifyPipelineCallback(req,{url:cfg.origin+path,pubkey:cfg.webhookPubkey});}catch{throw new HttpError(401,'Invalid pipeline callback');}
+    let verified;try{verified=await verifyPipelineCallback(req,{url:cfg.origin+path,urlAliases:cfg.origins.slice(1).map(origin=>origin+path),pubkey:cfg.webhookPubkey});}catch{throw new HttpError(401,'Invalid pipeline callback');}
     const {envelope,eventId,fingerprint}=verified;
     return json(store.once('delivery:'+envelope.deliveryId,fingerprint,()=>{
      const found=store.all('job').find(j=>j.runId===envelope.runId);need(found,409,'Run not yet registered; retry delivery');const j=found!;
@@ -97,7 +97,7 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
    }
    const imageJob=path.match(/^\/api\/interview-job-images\/([a-f0-9-]+)$/);
    if(imageJob){need(cfg.interviewImagesEnabled,503,'Image interviews are not active yet');return imageAccess.response(req,imageJob[1]!);}
-   need(Number(req.headers.get('content-length')||0)<=12*1024*1024,413,'Request too large');const body=await req.text();need(Buffer.byteLength(body)<=12*1024*1024,413,'Request too large');const pk=authenticate(req,body,cfg.origin,store);let b:any={};try{if(body)b=JSON.parse(body);}catch{throw new HttpError(400,'Invalid JSON');}
+   need(Number(req.headers.get('content-length')||0)<=12*1024*1024,413,'Request too large');const body=await req.text();need(Buffer.byteLength(body)<=12*1024*1024,413,'Request too large');const pk=authenticate(req,body,cfg.origins,store);let b:any={};try{if(body)b=JSON.parse(body);}catch{throw new HttpError(400,'Invalid JSON');}
    const p=path.split('/').filter(Boolean);const id=p[2];
    if(p[1]==='nstack'&&p[2]==='discovery-request'&&method==='POST'){
     need(ADMINS.includes(pk),403,'Admin required');need(typeof b.endpoint==='string'&&typeof b.path==='string'&&b.path.length<=5000,400,'Bounded discovery request required');
@@ -118,7 +118,7 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
    if(p[1]==='artifacts'&&p[3]==='data-installations'&&p.length===4)return json(nstack.installation(pk,id,method,b));
    if(path==='/api/me'&&method==='GET'){
     const s=settings();if(s.featuredProjectId&&Date.parse(s.featuredUntil)>Date.now()&&store.get('project',s.featuredProjectId)&&!store.get('project',s.featuredProjectId)?.deletedAt)store.put('membership',{id:s.featuredProjectId+':'+pk,projectId:s.featuredProjectId,pubkey:pk});
-    return json({pubkey:pk,admin:ADMINS.includes(pk),profile:store.get('profile',pk)||{name:'',avatar:''},settings:s,integration:{enabled:cfg.integrationEnabled,interview:cfg.integrationEnabled?(cfg.interviewImagesEnabled?'configured-scoped-agent':'configured-tool-free'):'unconfigured',interviewImages:cfg.interviewImagesEnabled,builder:cfg.builderEnabled?'configured-admin-trusted-host':'unconfigured',hostFilesystemIsolation:false,reason:cfg.integrationEnabled?null:'The tool-free interviewer has not been connected to its managed pipeline yet'}});
+    return json({publicOrigin:cfg.origin,pubkey:pk,admin:ADMINS.includes(pk),profile:store.get('profile',pk)||{name:'',avatar:''},settings:s,integration:{enabled:cfg.integrationEnabled,interview:cfg.integrationEnabled?(cfg.interviewImagesEnabled?'configured-scoped-agent':'configured-tool-free'):'unconfigured',interviewImages:cfg.interviewImagesEnabled,builder:cfg.builderEnabled?'configured-admin-trusted-host':'unconfigured',hostFilesystemIsolation:false,reason:cfg.integrationEnabled?null:'The tool-free interviewer has not been connected to its managed pipeline yet'}});
    }
    if(path==='/api/profile/nostr'&&method==='GET'){
     const fresh=await readNostrProfile(pk);const previous=store.get('nostrProfile',pk);const profile=newestProfile([fresh,previous?verifiedProfile(previous.event,pk):null]);
@@ -135,7 +135,7 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
    if(p[1]==='projects'){
     const project=member(pk,id);
     if(p[3]==='library'&&p.length===4&&method==='GET')return json({entries:sharing.list(pk,id)});
-    if(p[3]==='library'&&p.length===6&&p[5]==='preview'&&method==='POST')return json({previewUrl:sharing.ticket(pk,id,{shareId:decodeURIComponent(p[4]!)})});
+    if(p[3]==='library'&&p.length===6&&p[5]==='preview'&&method==='POST')return json({previewUrl:cfg.origin+sharing.ticket(pk,id,{shareId:decodeURIComponent(p[4]!)})});
     if(p[3]==='artifact-shares'){
      if(p.length===4&&method==='GET')return json({shares:sharing.manage(pk,id)});
      if(p.length===4&&method==='POST')return json(sharing.approve(pk,id,b),201);

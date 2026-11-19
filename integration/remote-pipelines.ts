@@ -21,10 +21,10 @@ function tag(event: any, name: string): string {
   if (!Array.isArray(values) || values.length !== 1 || values[0].length !== 2 || typeof values[0][1] !== 'string') throw Error(`Invalid ${name} tag`);
   return values[0][1];
 }
-function signedEvent(event: any, pubkey: string, url: string, method: string, bodyHash: string | null, now = Date.now()) {
+function signedEvent(event: any, pubkey: string, url: string | readonly string[], method: string, bodyHash: string | null, now = Date.now()) {
   if (!event || event.kind !== 27235 || event.pubkey !== pubkey || !verifyEvent(event) ||
       !Number.isSafeInteger(event.created_at) || Math.abs(now / 1000 - event.created_at) > 60 ||
-      tag(event, 'u') !== url || tag(event, 'method') !== method ||
+      !(typeof url==='string'?[url]:url).includes(tag(event, 'u')) || tag(event, 'method') !== method ||
       (bodyHash !== null && tag(event, 'payload') !== bodyHash)) throw Error('Invalid pipeline signature');
 }
 export function createRemotePipelines(config: RemotePipelineConfig, transport: typeof fetch = fetch) {
@@ -62,13 +62,15 @@ export function createRemotePipelines(config: RemotePipelineConfig, transport: t
   };
 }
 /** Verify before DB application. Caller must atomically persist event ID AND delivery/run fingerprint. */
-export async function verifyPipelineCallback(request: Request, options: {url:string;pubkey:string;now?:number}) {
+export async function verifyPipelineCallback(request: Request, options: {url:string;urlAliases?:readonly string[];pubkey:string;now?:number}) {
   const authorization = request.headers.get('authorization');
   if (!authorization?.startsWith('Nostr ') || authorization.length > 12000) throw Error('Missing pipeline signature');
   const body = await request.text();
   if (Buffer.byteLength(body) > 20 * 1024 * 1024) throw Error('Pipeline callback too large');
   const event = JSON.parse(Buffer.from(authorization.slice(6),'base64').toString('utf8'));
-  signedEvent(event,options.pubkey,options.url,request.method,digest(body),options.now);
+  const actual=new URL(request.url);
+  const urls=[options.url,...(options.urlAliases??[])].filter(value=>{const expected=new URL(value);return expected.pathname===actual.pathname&&expected.search===actual.search;});
+  signedEvent(event,options.pubkey,urls,request.method,digest(body),options.now);
   const envelope = JSON.parse(body) as PipelineEnvelope;
   if (request.method !== 'POST' || !envelope || typeof envelope.deliveryId !== 'string' || typeof envelope.runId !== 'string' ||
       typeof envelope.status !== 'string' || typeof envelope.terminal !== 'boolean' || tag(event,'delivery') !== envelope.deliveryId ||
