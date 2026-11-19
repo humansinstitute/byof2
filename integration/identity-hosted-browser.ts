@@ -18,7 +18,7 @@ let context=await launch();let exactPubkey='';let designUrl='';
 // Capture only public identity and design data. Do not capture auth headers/recovery exports.
 const observe=(page:any)=>{page.on('response',async(response:any)=>{if(new URL(response.url()).pathname==='/api/me'&&response.ok()){const account=await response.json();if(exactPubkey)expect(account.pubkey).toBe(exactPubkey);else exactPubkey=account.pubkey;}});};
 try{
- let page=context.pages()[0]!;observe(page);await page.goto(origin);await page.getByRole('button',{name:'Create anonymous account'}).click();await page.locator('#profile-form').waitFor();await page.locator('[name=name]').fill(name);await page.getByRole('button',{name:'Save profile',exact:true}).click();await page.locator('#join-form').waitFor();
+ let page=context.pages()[0]!;observe(page);await page.goto(origin);await page.getByRole('button',{name:'Create account'}).click();await page.locator('#profile-form').waitFor();await page.locator('[name=name]').fill(name);await page.getByRole('button',{name:'Save profile',exact:true}).click();await page.locator('#join-form').waitFor();
  await page.locator('#join-form input').fill(code);await page.locator('#join-form button').click();await page.locator('[data-action=new-design]').first().click();await page.locator('#message-input').waitFor();
  await page.locator('[data-action=rename]').click();await page.getByLabel('Design title',{exact:true}).fill(title);await page.getByRole('button',{name:'Save title',exact:true}).click();await expect(page.locator('.title-edit')).toContainText(title);designUrl=page.url();expect(exactPubkey).toMatch(/^[a-f0-9]{64}$/);
  await page.screenshot({path:join(evidence,new URL(origin).hostname+'-created.png')});await context.close();

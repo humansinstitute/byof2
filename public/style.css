@@ -133,3 +133,17 @@ body:has(.participant-workshop){height:var(--workshop-viewport-height,100dvh)}
 dialog.workshop-fullscreen{margin:0;border:0;width:100vw;height:100dvh;max-width:none;max-height:none;color:inherit}dialog.workshop-fullscreen::backdrop{background:var(--paper)}
 [aria-label="Workshop starters"] button{min-height:44px}
 body:has(.participant-workshop){overflow:hidden}
+
+/* Secondary controls expand in flow, so panel overflow never clips their actions. */
+.admin-more{max-width:100%;min-width:0;font-size:.86rem}.admin-more>summary,.advanced-brand>summary{cursor:pointer;min-height:44px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--paper);font-weight:600}.admin-more:focus-within>summary{border-color:var(--green)}summary:focus-visible{outline:3px solid #b5c8a8;outline-offset:3px}.more-actions{display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:10px 0;max-height:35dvh;overflow-y:auto;max-width:min(320px,75vw)}.more-actions button{min-height:44px;white-space:normal;text-align:left}.more-actions .help{max-width:260px;margin:0}.panel-head:has(.admin-more[open]){align-items:flex-start}.join-row>input{flex:1;min-width:0;margin:0}.advanced-brand{margin-top:18px}.advanced-brand label{margin-top:14px}#avatar-link>summary{cursor:pointer;min-height:44px;padding:12px 0}.implementation-banner details{margin-top:4px}.implementation-banner p{margin:4px 0}.project-card{min-height:130px;gap:12px}.project-card p:empty,.project-work-card .card-actions:empty{display:none}
+@media(max-width:600px){.workspace-heading>.row{flex-wrap:wrap;flex-shrink:1;justify-content:flex-end}.admin-more>summary{min-height:44px}.more-actions{max-width:70vw}.project-workspace>.admin-more{margin:14px 0}.workspace .panel-head .row{flex-wrap:wrap}.join-row{align-items:center}}
+
+/* Keep the workshop decision visible; only its design document scrolls. */
+.modal.workshop-summary-modal{display:flex;flex-direction:column;height:min(760px,calc(100dvh - 24px));max-height:calc(100dvh - 24px);overflow:hidden;min-height:0}.workshop-summary-modal .modal-head{flex:none}.workshop-summary-modal form{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;gap:12px}.workshop-summary-modal .workshop-summary{flex:1;min-height:0;max-height:none;overflow:auto;margin:0;overscroll-behavior:contain}.workshop-summary-modal form>p{flex:none;font-size:.82rem;line-height:1.4;margin:0}.workshop-summary-modal .modal-actions{flex:none;margin:0;gap:8px}.workshop-summary-modal .modal-actions button{min-height:44px;white-space:normal}.workshop-summary-modal .modal-head h2{overflow-wrap:anywhere}.workshop-summary-modal form>.error-box{flex:none;max-height:18dvh;overflow:auto}
+@media(max-width:600px){.modal.workshop-summary-modal{padding:16px;width:100%;max-height:calc(100dvh - 24px)}.workshop-summary-modal .modal-head{margin-bottom:12px}.workshop-summary-modal .modal-head h2{font-size:1.2rem}.workshop-summary-modal .modal-actions{display:grid;grid-template-columns:1fr}.workshop-summary-modal .modal-actions button{width:100%}}
+
+.action-error{flex:none;max-height:22dvh;overflow:auto;margin:12px 20px}.action-error p{margin:6px 0}.action-error button{min-height:44px}
+
+.modal .action-error{margin:0 0 12px;max-height:25dvh}.action-error:focus{outline:3px solid #b5c8a8;outline-offset:2px}
+
+.site-builder [hidden]{display:none!important}

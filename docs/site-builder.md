@@ -27,7 +27,7 @@ Every Site Builder API request uses the existing NIP-98 signature and server adm
 
 Clicking **Publish changes** saves the draft and directly publishes its selected exact versions, including private versions, without a repeated confirmation dialog. The signed request carries the saved revision and explicit selected version exposure list. It exposes only the selected package versions through that release. It does not change the artefact's original public version selector or expose other versions, interviews or designs. The stable site is `/sites/:project/`, with page addresses `/sites/:project/page/:slug/`. Immutable release roots and pages live under `/sites/:project/releases/:release/`. Each shell loads its artefact frame from its immutable release URL, so a later publication cannot swap its bytes mid-load. Original `/sites/:project/:artifact/` contribution URLs continue to use the existing selector.
 
-Draft editing and publication are separate. Browser edits persist locally after a conflict; **Reload saved draft** explicitly discards local edits. Publication and rollback request IDs have durable receipts: retry an identical request ID/body after an uncertain response. Reusing a request ID with changed content returns a conflict.
+Draft editing and publication are separate. Browser edits persist locally after a conflict; **Discard changes** appears when local edits exist and asks for confirmation before discarding them. Publication and rollback request IDs have durable receipts: retry an identical request ID/body after an uncertain response. Reusing a request ID with changed content returns a conflict.
 
 ## Private preview and sandbox
 
@@ -43,13 +43,13 @@ Back up the database through the established consistent SQLite backup process be
 
 ## Three-tab editor
 
-The editor has three freely accessible tabs. **Site details** holds the site title, homepage, shell layout, footer and project brand. The homepage list contains only included pages; an empty site offers a shortcut to the toolbox. Site descriptions are not part of the current draft contract.
+The editor has three freely accessible tabs. **Site details** holds the site title, homepage, shell layout, footer and project brand. The homepage list contains only included pages; an empty site keeps the toolbox tab available. Site descriptions are not part of the current draft contract.
 
 **Artefact toolbox** shows actual project artefacts and their tested versions. Visual previews and the expanded preview use the existing expiring preview URLs in opaque-origin sandboxed frames. No generated content executes with the editor's identity. Choose a tested exact version and **Add to site**; **Added** identifies an artefact already placed on the site.
 
 **Pages & navigation** contains only included placements. Drag the page handle to another page, use Alt+Up/Down on the handle, or use the up/down buttons (including on touch devices). Change the navigation label, address and visibility without renaming the source artefact. Page/version options preserve exact pins; a newer tested version offers an explicit update action. New builds never change the selected page automatically. Removing a page removes its draft placement only; removing the homepage selects the first remaining page or leaves the site empty. Older releases and source artefacts remain intact.
 
-Save draft, Private preview, Publish changes and Reload saved draft remain above the tabs. Hidden panels stay mounted so edits survive switching tabs and saving from any panel. Existing revision conflicts, local recovery, explicit Publish action, exact-version exposure intent and immutable publication/rollback APIs remain authoritative.
+Save draft, Private preview and Publish changes remain above the tabs. Discard changes appears there only while local edits exist, with explicit confirmation. Secondary typography and guidance fields stay mounted under Advanced brand. Hidden panels stay mounted so edits survive switching tabs and saving from any panel. Existing revision conflicts, local recovery, explicit Publish action, exact-version exposure intent and immutable publication/rollback APIs remain authoritative.
 
 Toolbox and private whole-site previews open in a near-viewport dialog with a compact header. The frame uses the remaining height and scrolls its content on desktop and phone. Close, Escape and backdrop dismissal return focus to the opener when it remains mounted. Other dialogs retain their compact sizing.
 
