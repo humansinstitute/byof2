@@ -27,3 +27,6 @@ test('durable retry, immutable turn and correlation, gaps/order and terminal aut
 test('activity view escapes commentary and hides internal binding/fingerprint',()=>{
  const store=fixture();try{acceptAgentActivity(store,event({content:'<script>private-looking markup</script>'}),'body');const events=activityForJob(store,store.get('job','job')!);expect(Object.keys(events[0]).sort()).toEqual(['content','id','sequence','timestamp','type']);const html=renderAgentActivity({id:'job',status:'running',activity:events as any});expect(html).toContain('&lt;script&gt;');expect(html).not.toContain('<script>');expect(html).toContain('Agent activity');}finally{store.db.close();}
 });
+test('reply-first and workshop workflows retain signed activity with the same immutable binding checks',async()=>{
+ for(const workflowVersion of ['interview-v8','interview-v9']){const store=fixture();try{store.put('job',{...store.get('job','job')!,workflowVersion});const verified=await verifyAgentActivity(request(event({type:'tools',content:'Using tools'})),[url],getPublicKey(key));acceptAgentActivity(store,verified.event,verified.fingerprint);expect(activityForJob(store,store.get('job','job')!)).toHaveLength(1);expect(()=>acceptAgentActivity(store,event({eventId:'b'.repeat(64),sequence:2,runId:'foreign'}),'other')).toThrow();}finally{store.db.close();}}
+});

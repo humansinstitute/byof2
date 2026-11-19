@@ -27,7 +27,7 @@ export function acceptAgentActivity(store:Store,event:AgentActivity,fingerprint:
  const j=store.get('job',event.correlation.jobId);need(j&&!store.get('project',j.projectId)?.deletedAt,404,'Activity job not found');
  for(const [key,value] of Object.entries(event.correlation))need((key==='jobId'?j!.id:j![key])===value,403,'Activity job mismatch');
  need(j!.runId===event.runId,409,'Run not yet registered or does not match');
- need(['interview-v7','builder-v7'].includes(j!.workflowVersion),403,'Activity workflow not enabled');
+ need(['interview-v7','interview-v8','interview-v9','builder-v7'].includes(j!.workflowVersion),403,'Activity workflow not enabled');
  const binding={runId:event.runId,stepId:event.stepId,sessionId:event.sessionId,turnId:event.turnId};
  if(j!.activityBinding)need(JSON.stringify(j!.activityBinding)===JSON.stringify(binding),409,'Activity turn changed');
  const old=store.get('agentActivity',event.eventId);

@@ -1,6 +1,7 @@
 import {recoverInterviewReply} from './interview-recovery';
 import type {RemotePipelineConfig} from '../integration/remote-pipelines';
 import {verifyAgentActivity,acceptAgentActivity,activityForJob} from './agent-activity';
+import {createWorkshop} from './workshop';
 import {createArtifactSharing} from './artifact-sharing';
 import {storeInterviewImage} from './interview-storage';
 import {readFileSync} from 'node:fs';
@@ -27,6 +28,7 @@ export function createApp(store:Store,cfg= config(),options:{interviewRecoveryCo
  const siteBuilder=createSiteBuilder(store);
  const lifecycle=createDesignLifecycle(store);
  const sharing=createArtifactSharing(store);
+ const workshop=createWorkshop(store,sharing);
  const importView=(pk:string,d:Row)=>{const reference=sharing.reference(d.id);return reference?{...reference,previewUrl:cfg.origin+sharing.ticket(pk,d.projectId,{designId:d.id})}:null;};
  const interviewImages=createInterviewImages(store),imageAccess=createInterviewImageAccess(store,cfg.origin);
  const read=(k:string,id:string)=>{const r=store.get(k,id);need(r,404,'Not found');const projectId=k==='project'?id:r?.projectId||(r?.designId?store.get('design',r.designId)?.projectId:null);if(projectId)need(!store.get('project',projectId)?.deletedAt,404,'Project not found');return r!;};
@@ -64,7 +66,7 @@ export function createApp(store:Store,cfg= config(),options:{interviewRecoveryCo
   const intervention=kind==='interview'&&pk!==d.owner;
   const modelContent=(message:Row)=>message.authorRole==='administrator'?`Administrative intervention by ${message.author} for participant ${d.owner}; this is not a participant confirmation:\n\n${message.content}`:message.content;
   const history=messages(conversation.id).map(m=>({...m,content:modelContent(m)}));const m=store.add('message',{conversationId:conversation.id,role:'user',content,artifactVersionId:av?.id||null,author:pk,...(intervention?{authorRole:'administrator',participantOwner:d.owner}:{}),...(images.length?{imageIds,images}:{})});
-  const created=store.add('job',{owner:pk,kind,projectId:d.projectId,designId:d.id,conversationId:conversation.id,requestId:key,contentHash:hash(JSON.stringify(b)),messageId:m.id,status:'queued',attempts:0,workflowVersion:kind==='interview'?cfg.interviewWorkflowVersion:cfg.builderWorkflowVersion,promptVersion:4,expectedSnapshotId:d.currentSnapshotId||null,snapshotId:pinned?.id||null,designPin:pinned?lifecycle.pin(pinned.id):null,startingVersionId,context:{importedSource:sharing.reference(d.id),participantOwner:d.owner,submittedBy:pk,priorSourceReceipts,storage,brand:buildBrandContext(siteBuilder.getDraft(d.projectId).brand,store.get('designBrand',d.id)||{revision:0,exceptions:''}),message:modelContent(m),history,snapshot:pinned,artifactVersion:sharing.artifactEvidence(d.id,av||null),startingArtifact:startingVersionId?read('version',startingVersionId):kind==='implementation'?sharing.startingArtifact(d.id):null},progress:'Waiting for the managed agent runtime'});
+  const created=store.add('job',{owner:pk,kind,projectId:d.projectId,designId:d.id,conversationId:conversation.id,requestId:key,contentHash:hash(JSON.stringify(b)),messageId:m.id,status:'queued',attempts:0,workflowVersion:kind==='interview'?cfg.interviewWorkflowVersion:cfg.builderWorkflowVersion,promptVersion:4,expectedSnapshotId:d.currentSnapshotId||null,snapshotId:pinned?.id||null,designPin:pinned?lifecycle.pin(pinned.id):null,startingVersionId,context:{importedSource:sharing.reference(d.id),participantOwner:d.owner,submittedBy:pk,priorSourceReceipts,storage,brand:buildBrandContext(siteBuilder.getDraft(d.projectId).brand,store.get('designBrand',d.id)||{revision:0,exceptions:''}),...(d.workshop&&kind==='interview'?{workshop:{version:1,starter:!!d.starterTitle,firstTurn:!history.length}}:{}),message:modelContent(m),history,snapshot:pinned,artifactVersion:sharing.artifactEvidence(d.id,av||null),startingArtifact:startingVersionId?read('version',startingVersionId):kind==='implementation'?sharing.startingArtifact(d.id):null},progress:'Waiting for the managed agent runtime'});
   if(images.length){const pinned=imageAccess.pin(pk,d.id,created.id,m.id,imageIds);return store.put('job',{...created,context:{...created.context,...pinned}});}
   return created;
  }
@@ -92,6 +94,7 @@ export function createApp(store:Store,cfg= config(),options:{interviewRecoveryCo
   const json=(v:any,status=200)=>Response.json(v,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff'}});
   try{
    if(path.startsWith('/app-data/')&&method==='GET'){const versionId=path.split('/')[2];const publicData=await nstack.operate(null,versionId,{operation:url.searchParams.get('operation'),collection:url.searchParams.get('collection'),scope:'live',id:url.searchParams.get('id'),limit:Number(url.searchParams.get('limit')||25),offset:Number(url.searchParams.get('offset')||0)});const response=json(publicData);response.headers.set('access-control-allow-origin','*');return response;}
+   if(path==='/api/invitation'&&method==='GET'){const code=(url.searchParams.get('code')||'').trim().toUpperCase();need(code.length>0&&code.length<=100,400,'Invitation code required');const project=store.all('project').find(p=>!p.deletedAt&&p.joinCode===code);need(project,404,'Join code not found');return json({title:project!.title});}
    if(path==='/health')return json({ok:true});if(path==='/version')return json({version:cfg.version});
    if(path.startsWith('/sites/')){const response=siteBuilder.publicResponse(path);if(response)return response;}
    if(path.startsWith('/library-preview/')&&method==='GET'){const parts=path.split('/');return sharing.preview(parts[2]!,parts.slice(3).join('/')||'index.html',cfg.origin);}
@@ -156,6 +159,7 @@ export function createApp(store:Store,cfg= config(),options:{interviewRecoveryCo
    if(path==='/api/join'&&method==='POST'){const project=store.all('project').find(p=>!p.deletedAt&&p.joinCode===String(b.code).trim().toUpperCase());need(project,404,'Join code not found');store.put('membership',{id:project!.id+':'+pk,projectId:project!.id,pubkey:pk});return json(project);}
    if(p[1]==='projects'){
     const project=member(pk,id);
+    if(p[3]==='workshop'&&p.length===4){if(method==='GET')return json({starters:workshop.list(pk,id)});if(method==='PATCH')return json(workshop.select(pk,id,b));if(method==='POST')return json(workshop.start(pk,id,b),201);}
     if(p[3]==='library'&&p.length===4&&method==='GET')return json({entries:sharing.list(pk,id)});
     if(p[3]==='library'&&p.length===6&&p[5]==='preview'&&method==='POST')return json({previewUrl:cfg.origin+sharing.ticket(pk,id,{shareId:decodeURIComponent(p[4]!)})});
     if(p[3]==='artifact-shares'){
