@@ -1,3 +1,4 @@
+import {interviewRecoveryConfigs} from './interview-recovery';
 import {configuredInterviewStorage} from './interview-managed-storage';
 import {parseNStackConnectionsJSON} from './nstack';
 import {ensureDesignLifecycleBackup} from './migration-backup';
@@ -10,7 +11,7 @@ import {startDispatcher} from './dispatcher';
 import {config} from './config';
 import {Store} from './store';
 import {createApp} from './app';
-const cfg=config();mkdirSync(dirname(cfg.database),{recursive:true});materializeGatewayCredential(cfg.database);const store=new Store(cfg.database);ensureDesignLifecycleBackup(store,cfg.database);const interviewStorage=configuredInterviewStorage(store);const app=createApp(store,cfg,{interviewStorage,nstackTransport:createManagedNStackTransport(),nstackFiles:createManagedNStackFiles(),nstackConnections:parseNStackConnectionsJSON(process.env.BYO_NSTACK_CONNECTIONS_JSON)});
+const cfg=config();mkdirSync(dirname(cfg.database),{recursive:true});materializeGatewayCredential(cfg.database);const store=new Store(cfg.database);ensureDesignLifecycleBackup(store,cfg.database);const interviewStorage=configuredInterviewStorage(store);const app=createApp(store,cfg,{interviewRecoveryConfigs,interviewStorage,nstackTransport:createManagedNStackTransport(),nstackFiles:createManagedNStackFiles(),nstackConnections:parseNStackConnectionsJSON(process.env.BYO_NSTACK_CONNECTIONS_JSON)});
 materializePipelineCredentials(cfg.database);
 startDispatcher(store);
 Bun.serve({port:cfg.port,hostname:'0.0.0.0',fetch:app.fetch,maxRequestBodySize:12*1024*1024});

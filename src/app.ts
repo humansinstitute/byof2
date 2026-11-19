@@ -1,3 +1,5 @@
+import {recoverInterviewReply} from './interview-recovery';
+import type {RemotePipelineConfig} from '../integration/remote-pipelines';
 import {verifyAgentActivity,acceptAgentActivity,activityForJob} from './agent-activity';
 import {createArtifactSharing} from './artifact-sharing';
 import {storeInterviewImage} from './interview-storage';
@@ -19,7 +21,7 @@ import {createInterviewImageAccess} from './interview-image-access';
 import {agentStorageContext} from './agent-storage-context';
 const text=(v:any,max=50000)=>{need(typeof v==='string'&&v.trim().length>0&&v.length<=max,400,'Text is required or too long');return v.trim() as string;};
 const escape=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NStackTransport;nstackFiles?:NStackFiles;nstackConnections?:NStackConnectionHint[];interviewStorage?:{put:(actor:string,designId:string,imageId:string)=>Promise<{objectId:string;storage:'nstack-private'}>}}={}){
+export function createApp(store:Store,cfg= config(),options:{interviewRecoveryConfigs?:()=>RemotePipelineConfig[];recoverInterview?:typeof recoverInterviewReply;nstackTransport?:NStackTransport;nstackFiles?:NStackFiles;nstackConnections?:NStackConnectionHint[];interviewStorage?:{put:(actor:string,designId:string,imageId:string)=>Promise<{objectId:string;storage:'nstack-private'}>}}={}){
  const browserOperations=createBrowserOperations();
  const nstack=createNStack(store,{transport:options.nstackTransport,files:options.nstackFiles,connections:options.nstackConnections});
  const siteBuilder=createSiteBuilder(store);
@@ -67,16 +69,24 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
   return created;
  }
  function complete(j:Row,b:any){
-  need(['running','queued','dispatching','uncertain','failed'].includes(j.status),409,'Job is already complete');
+  if(j.completedAt)return {ok:true,alreadyDelivered:true};
+  need(b&&typeof b==='object',400,'Completion result required');
+  need(['running','queued','dispatching','uncertain','failed','conflict'].includes(j.status),409,'Job is already complete');
   if(b.error){store.put('job',{...j,status:'failed',error:text(b.error),progress:'The agent could not complete this turn'});return {ok:true};}
-  const response=text(b.response);const d=read('design',j.designId);
+  const response=text(b.response,j.kind==='interview'?180000:50000);need(j.kind!=='interview'||Buffer.byteLength(response)<=180000,400,'Interview reply too large');const d=read('design',j.designId);
+  let designSave:any=null;
   if(j.kind==='interview'){
-   need(b.snapshot&&typeof b.snapshot.document==='string'&&typeof b.snapshot.title==='string',422,'Every interview response requires a design snapshot');
-   need(d.currentSnapshotId===j.expectedSnapshotId,409,'Design changed during interview; recover against latest snapshot');
-   snapshot(d,text(b.snapshot.title,200),text(b.snapshot.document), 'interview',j.id);
+   const s=b.snapshot;
+   const valid=s&&typeof s.document==='string'&&s.document.trim()&&s.document.length<=100000&&typeof s.title==='string'&&s.title.trim()&&s.title.length<=200;
+   if(!valid)designSave={status:'not-saved',reason:'The reply is complete, but no valid design within the size limits was returned. Your previous design is unchanged.'};
+   else if((d.currentSnapshotId||null)!==(j.expectedSnapshotId||null))designSave={status:'conflict',reason:'Your design changed during this turn. Your edits are preserved; the proposed design is retained for review.'};
+   else {const saved=snapshot(d,s.title.trim(),s.document.trim(),'interview',j.id);designSave={status:'saved',snapshotId:saved.id};}
   }
-  store.add('message',{conversationId:j.conversationId,role:'assistant',content:response,jobId:j.id});store.put('job',{...j,status:'complete',progress:'Complete',completedAt:new Date().toISOString(),completionReceipt:b.receipt||null,executionProfile:b.executionProfile||null,sourceReceipts:b.research?.receipts??[]});return {ok:true};
+  store.add('message',{conversationId:j.conversationId,role:'assistant',content:response,contentFormat:b.responseFormat==='text'?'text':'markdown',jobId:j.id,...(designSave?{designSave}:{})});
+  const conflict=designSave?.status==='conflict';
+  store.put('job',{...j,status:conflict?'conflict':'complete',error:null,progress:conflict?'Reply delivered; design edits preserved':'Complete',completedAt:new Date().toISOString(),completionReceipt:b.receipt||null,executionProfile:b.executionProfile||null,sourceReceipts:b.research?.receipts??[],sourceAttribution:b.research?.attribution??null,...(designSave?{designSave}:{}),pendingResult:conflict?b:null});return {ok:true,...(conflict?{conflict:true}:{})};
  }
+
  async function fetch(req:Request):Promise<Response>{
   const url=new URL(req.url);let path=url.pathname;const method=req.method;
   const json=(v:any,status=200)=>Response.json(v,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff'}});
@@ -103,7 +113,7 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
      if(!envelope.terminal){store.put('job',{...j,progress:'Agent working',pipelineStatus:envelope.status});return {ok:true};}
      const result=envelope.result as any;
      if(j.status==='superseded')return {ok:true,ignored:'superseded job'};
-     if(j.kind==='interview'&&read('design',j.designId).currentSnapshotId!==j.expectedSnapshotId){store.put('job',{...j,status:'conflict',progress:'Your design changed during this turn. Review it and rebase the interview.',pendingResult:result});return {ok:true,conflict:true};}
+     if(j.completedAt)return {ok:true,ignored:'already delivered'};
      return complete(j,envelope.status==='ok'||envelope.status==='completed'||envelope.status==='success'?result:{error:typeof envelope.error==='string'?envelope.error:'Managed pipeline failed'});
     }));
    }
@@ -197,6 +207,18 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
    if(p[1]==='jobs'){
     const j=read('job',id);if(j.kind==='implementation')implementationAccess(pk,read('implementation',j.conversationId));else owner(pk,j.designId);
     if(method==='GET')return json({...j,context:undefined,activityBinding:undefined,resultVersionId:store.get('buildResult',j.id)?.versionId});
+    if(p[3]==='recover'&&method==='POST'&&b.action==='completed-reply'){
+     admin(pk);need(j.kind==='interview',400,'Interview required');
+     if(j.completedAt)return json({ok:true,alreadyDelivered:true});
+     need(['running','uncertain','failed','conflict'].includes(j.status),409,'Original interview is not recoverable');
+     need(!Object.keys(b).some(k=>k!=='action'),400,'Recovery accepts no supplied agent content');
+     let recovered;try{recovered=await (options.recoverInterview||recoverInterviewReply)(j,options.interviewRecoveryConfigs?.()??[]);}catch(error){throw new HttpError(409,error instanceof Error?error.message:'Original reply recovery unavailable');}
+     return json(store.transaction(()=>{
+      const fresh=read('job',j.id);if(fresh.completedAt)return {ok:true,alreadyDelivered:true};
+      need(fresh.runId===j.runId&&JSON.stringify(fresh.dispatchBinding)===JSON.stringify(j.dispatchBinding)&&fresh.status!=='superseded',409,'Job changed during recovery');
+      const result=complete(fresh,recovered.result);store.put('job',{...read('job',j.id),replyRecovery:recovered.evidence});return result;
+     }));
+    }
     if(p[3]==='recover'&&method==='POST')return json(store.transaction(()=>{
      const action=b.action||'check';
      if(action==='check'){need(['running','uncertain','dispatching','queued'].includes(j.status),409,'Job does not need delivery recovery');return store.put('job',{...j,recoveryRequestedAt:Date.now(),lastPollAt:0,progress:'Checking managed run and delivery; original request preserved'});}

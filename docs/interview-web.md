@@ -8,13 +8,17 @@ The runtime is a tool-authority boundary. It does not claim to be an operating-s
 
 ## Pipeline and response contract
 
-Install these new versions without overwriting earlier definitions/functions:
+The reply-first workflow is additive; retain all previously installed definitions, functions and in-flight grant pins:
 
-- `pipelines/interview.v5.json`: prepare, actual native scoped turn, validate complete cited design.
-- `byofreedom.prepareInterview.v5`: preserves roles, current saved design/direct edits, pinned project brand and implemented-version feedback; supplies approved source IDs and compact image metadata.
-- `byofreedom.finishInterview.v4`: requires successful scoped native completion and exactly `{title, document, response}`. The document contains `Confirmed facts`, `Source observations`, `Assumptions`, and `Open questions` Markdown sections. It validates source citations against successful host receipts and returns the existing snapshot/callback shape.
+- `pipelines/interview.v8.json` uses `byofreedom.prepareInterview.v7`, the existing `session.scopedInterviewTurn.v1`, and `byofreedom.finishInterview.v5`.
+- Preparation guides a complete title/document/response JSON object and useful provenance headings. These are editorial instructions, not fatal prose validation. Extra fields, different headings and plain source URLs are accepted.
+- Finish requires completed scoped execution and matching image receipts. It parses only a whole JSON value or the historical whole-response JSON fence. A usable `response` is preferred; otherwise bounded original text is delivered as escaped plain text. Empty output, empty/unusable JSON values and output above 180,000 UTF-8 bytes remain explicit errors. No arbitrary JSON fragments are extracted and no formatting repair turn is requested.
+- A valid title/document saves an immutable revision. A missing, malformed or oversized design preserves the previous design and delivers the reply with a separate save warning. Concurrent direct edits preserve the candidate on the original job as a conflict while delivering its reply once. Explicit rebase remains a new user-requested turn; callback retry never reruns inference.
+- Host source receipts retain attribution separately from prose. A link in a document never confers verification; exact headings or Markdown citation syntax do not establish trust. Safe Markdown rendering remains unchanged for conversational responses and documents; raw fallback text is escaped.
 
-The scoped turn uses a new conversation generation (`byofreedom:interview:scoped-v1:<conversation-id>`). It never upgrades an older unrestricted native binding. Native completion, idempotency, signed callbacks and saved design revision conflicts retain their existing semantics. An interview never creates or publishes an artefact; it continues the same visible design and milestone history.
+The installed native runtime must also permit completed conversational output. Older Autopilot builds validate complete JSON inside the Claude adapter before returning native completion; BYOF source changes alone cannot remove that upstream gate. Runtime review, source pins and fresh grants must be coordinated by the deployment manager. No interview authority, image storage or publication permission is added by v8.
+
+The scoped turn uses a new conversation generation (`byofreedom:interview:scoped-v1:<conversation-id>`). It never upgrades an older unrestricted native binding. Native completion, idempotency and signed callback authority retain their existing semantics. Replies and design-save outcomes are persisted atomically, including conflict replies. An interview never creates or publishes an artefact; it continues the same visible design and milestone history.
 
 Followups receive a bounded, deduplicated list of prior public-source receipts from this conversation's completed scoped jobs. These app-pinned receipts preserve earlier source observations and canonical citations, labelled with their prior observation date, without forcing another fetch. Participant-added links and earlier assistant claims cannot enter this trusted receipt list. New receipts and prior observations remain separate; a preference-only turn must not claim a fresh source check.
 

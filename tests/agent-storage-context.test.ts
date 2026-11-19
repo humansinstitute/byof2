@@ -65,7 +65,8 @@ test('new versioned prepares require server context and v6 retains private nativ
  expect(config({INTERVIEW_PIPELINE_CONFIG:'set',INTERVIEW_WORKFLOW_VERSION:'interview-v6',INTERVIEW_SCOPED_TOOLS:'1'}).interviewImagesEnabled).toBe(true);
  expect(config({INTERVIEW_PIPELINE_CONFIG:'set',INTERVIEW_WORKFLOW_VERSION:'interview-v5',INTERVIEW_SCOPED_TOOLS:'1'}).interviewImagesEnabled).toBe(true);
  expect(config({INTERVIEW_PIPELINE_CONFIG:'set',INTERVIEW_WORKFLOW_VERSION:'interview-v7',INTERVIEW_SCOPED_TOOLS:'1'}).interviewImagesEnabled).toBe(true);
- expect(config({INTERVIEW_PIPELINE_CONFIG:'set',INTERVIEW_WORKFLOW_VERSION:'interview-v8',INTERVIEW_SCOPED_TOOLS:'1'}).interviewImagesEnabled).toBe(false);
+ expect(config({INTERVIEW_PIPELINE_CONFIG:'set',INTERVIEW_WORKFLOW_VERSION:'interview-v9',INTERVIEW_SCOPED_TOOLS:'1'}).interviewImagesEnabled).toBe(false);
+ expect(config({INTERVIEW_PIPELINE_CONFIG:'set',INTERVIEW_WORKFLOW_VERSION:'interview-v8',INTERVIEW_SCOPED_TOOLS:'1'}).interviewImagesEnabled).toBe(true);
 });
 test('new storage-aware definitions keep scoped runtime and exact builder publication authority',async()=>{
  const interviewDefinition=await Bun.file(new URL('../pipelines/interview.v6.json',import.meta.url)).json();

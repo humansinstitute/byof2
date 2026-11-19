@@ -148,17 +148,16 @@ describe('authorization and immutable design state',()=>{
  });
  test('every successful interview turn has exactly one immutable snapshot on callback retry',async()=>{
   const d=await design();const job=(await call(user,'/api/designs/'+d.id+'/messages','POST',{content:'I need more independence',requestId:'turn'})).body;
-  expect((await call(worker,`/api/worker/jobs/${job.id}/complete`,'POST',{response:'A question without snapshot?'})).status).toBe(422);
   const result={response:'What would make independence tangible?',snapshot:{title:'Independent tools',document:'Facts: participant needs independence.\nAssumptions: a tool may help.\nQuestions: which tool?'}};
   expect((await call(worker,`/api/worker/jobs/${job.id}/complete`,'POST',result)).status).toBe(200);
   expect((await call(worker,`/api/worker/jobs/${job.id}/complete`,'POST',result)).status).toBe(200);
   expect(store.all('snapshot')).toHaveLength(1);expect(store.all('message').filter(m=>m.role==='assistant')).toHaveLength(1);
  });
- test('an interview cannot overwrite a document edited while it was running',async()=>{
+ test('an interview preserves edits and delivers its reply when design saving conflicts',async()=>{
   const d=await design();const job=(await call(user,'/api/designs/'+d.id+'/messages','POST',{content:'My goal',requestId:'turn'})).body;
   const edited=(await save(d.id)).body;
-  expect((await call(worker,`/api/worker/jobs/${job.id}/complete`,'POST',{response:'Question?',snapshot:{title:'Stale',document:'Stale'}})).status).toBe(409);
-  expect(store.get('design',d.id)!.currentSnapshotId).toBe(edited.id);expect(store.all('snapshot')).toHaveLength(1);
+  expect((await call(worker,`/api/worker/jobs/${job.id}/complete`,'POST',{response:'Question?',snapshot:{title:'Stale',document:'Stale'}})).status).toBe(200);
+  expect(store.get('design',d.id)!.currentSnapshotId).toBe(edited.id);expect(store.all('snapshot')).toHaveLength(1);expect(store.all('message').filter(m=>m.role==='assistant')[0].content).toBe('Question?');expect(store.get('job',job.id)!.pendingResult.snapshot.document).toBe('Stale');
  });
 });
 
@@ -176,6 +175,22 @@ describe('signed pipeline completion callbacks',()=>{
   const request=callback(worker,envelope);const duplicate=request.clone();expect((await app.fetch(request)).status).toBe(200);expect((await app.fetch(duplicate)).status).toBe(200);expect((await app.fetch(callback(worker,envelope))).status).toBe(200);
   expect(store.get('job',job.id)!.status).toBe('complete');expect(store.all('snapshot')).toHaveLength(1);expect(store.all('message').filter(m=>m.role==='assistant')).toHaveLength(1);
  });
+ test('reply-only and incomplete design callbacks preserve prior snapshot and deduplicate across delivery IDs',async()=>{
+  const job=await pending();const previous=(await save(job.designId)).body;
+  store.put('job',{...store.get('job',job.id)!,expectedSnapshotId:previous.id});
+  const e={deliveryId:'reply-only',runId:'managed-run',status:'ok',terminal:true,result:{response:'Here is the completed answer.',snapshot:{title:'Incomplete'}},error:null};
+  expect((await app.fetch(callback(worker,e))).status).toBe(200);
+  expect((await app.fetch(callback(worker,e))).status).toBe(200);
+  expect((await app.fetch(callback(worker,{...e,deliveryId:'reply-only-again'}))).status).toBe(200);
+  const assistant=store.all('message').filter(m=>m.role==='assistant');expect(assistant).toHaveLength(1);expect(assistant[0].content).toBe(e.result.response);expect(assistant[0].designSave.status).toBe('not-saved');expect(store.get('design',job.designId)!.currentSnapshotId).toBe(previous.id);expect(store.all('snapshot')).toHaveLength(1);
+ });
+ test('oversized design preserves reply while invalid or oversized replies are rejected',async()=>{
+  const job=await pending();const e={deliveryId:'bounds',runId:'managed-run',status:'ok',terminal:true,result:{response:'Valid answer',snapshot:{title:'Large',document:'x'.repeat(100001)}},error:null};
+  expect((await app.fetch(callback(worker,{...e,result:{response:''}}))).status).toBe(400);
+  expect((await app.fetch(callback(worker,{...e,result:{response:'x'.repeat(180001)}}))).status).toBe(400);
+  expect(store.all('message').filter(m=>m.role==='assistant')).toHaveLength(0);
+  expect((await app.fetch(callback(worker,e))).status).toBe(200);expect(store.get('job',job.id)!.designSave.status).toBe('not-saved');expect(store.all('snapshot')).toHaveLength(0);
+ });
  test('untrusted signer, correlation forgery and foreign run cannot mutate app data',async()=>{
   await pending();const e={deliveryId:'delivery-two',runId:'managed-run',status:'ok',terminal:true,result:{response:'Hi',snapshot:{title:'Bad',document:'Bad'}},error:null};
   expect((await app.fetch(callback(other,e))).status).toBe(401);
@@ -185,13 +200,26 @@ describe('signed pipeline completion callbacks',()=>{
  test('conflicted delivery is acknowledged; explicit rebase pins latest design and fences late results',async()=>{
   const job=await pending();const latest=(await save(job.designId)).body;
   const e={deliveryId:'conflict-delivery',runId:'managed-run',status:'ok',terminal:true,result:{response:'Old result',snapshot:{title:'Old result',document:'Old result'}},error:null};
-  expect((await app.fetch(callback(worker,e))).status).toBe(200);expect(store.get('job',job.id)!.status).toBe('conflict');expect(store.all('snapshot')).toHaveLength(1);
+  expect((await app.fetch(callback(worker,e))).status).toBe(200);expect(store.get('job',job.id)!.status).toBe('conflict');expect(store.all('snapshot')).toHaveLength(1);expect(store.all('message').filter(m=>m.role==='assistant')).toHaveLength(1);expect(store.all('message').find(m=>m.role==='assistant')!.content).toBe('Old result');
   expect((await call(other,`/api/jobs/${job.id}/recover`,'POST',{action:'rebase',requestId:'recover-one'})).status).toBe(403);
   const rebased=await call(user,`/api/jobs/${job.id}/recover`,'POST',{action:'rebase',requestId:'recover-one'});expect(rebased.status).toBe(200);expect(rebased.body.parentJobId).toBe(job.id);expect(rebased.body.expectedSnapshotId).toBe(latest.id);expect(rebased.body.context.snapshot.document).toBe(latest.document);
   expect(store.get('job',job.id)!.expectedSnapshotId).toBeNull();expect(store.get('job',job.id)!.status).toBe('superseded');
   const duplicate=await call(user,`/api/jobs/${job.id}/recover`,'POST',{action:'rebase',requestId:'recover-one'});expect(duplicate.body.id).toBe(rebased.body.id);expect(store.all('job')).toHaveLength(2);
   expect((await call(user,`/api/jobs/${job.id}/recover`,'POST',{action:'rebase',requestId:'recover-two'})).status).toBe(409);
   expect((await app.fetch(callback(worker,{...e,deliveryId:'late-result'}))).status).toBe(200);expect(store.all('snapshot')).toHaveLength(1);expect(store.get('design',job.designId)!.currentSnapshotId).toBe(latest.id);
+ });
+ test('admin completed-reply recovery is read-only, job-bound and idempotent after concurrent edits',async()=>{
+  const job=await pending();const latest=(await save(job.designId)).body;let reads=0;
+  app=createApp(store,config({PUBLIC_ORIGIN:origin,WORKER_PUBKEY:workerPk,AUTOPILOT_WEBHOOK_PUBKEY:workerPk}),{recoverInterview:async original=>{reads++;expect(original.runId).toBe('managed-run');return {result:{response:'Recovered original answer',responseFormat:'text',snapshot:{title:'Candidate',document:'Retained candidate'},designSave:{status:'ready'},workflowVersion:'interview-v8',executionProfile:'scoped-interview',research:{receipts:[],attribution:'Host verified'},receipt:{receiptId:'receipt',requestId:'job',conversationKey:'conversation',sessionId:'session',nativeSessionId:'native',sequence:1}},evidence:{runId:original.runId,definitionId:'original',receiptId:'receipt',normalizer:'byofreedom.finishInterview.v5',recoveredAt:new Date().toISOString()}};}});
+  const path=`/api/jobs/${job.id}/recover`;
+  expect((await call(user,path,'POST',{action:'completed-reply'})).status).toBe(403);
+  expect((await call(admin,path,'POST',{action:'completed-reply',response:'Injected'})).status).toBe(400);expect(reads).toBe(0);
+  expect((await call(admin,path,'POST',{action:'completed-reply'})).status).toBe(200);
+  expect((await call(admin,path,'POST',{action:'completed-reply'})).status).toBe(200);expect(reads).toBe(1);
+  expect(store.get('design',job.designId)!.currentSnapshotId).toBe(latest.id);expect(store.all('snapshot')).toHaveLength(1);expect(store.all('job')).toHaveLength(1);
+  const saved=store.get('job',job.id)!;expect(saved.status).toBe('conflict');expect(saved.pendingResult.snapshot.document).toBe('Retained candidate');expect(saved.replyRecovery.runId).toBe('managed-run');
+  expect(store.all('message').filter(m=>m.role==='assistant')).toHaveLength(1);
+  const late={deliveryId:'old-error-after-recovery',runId:'managed-run',status:'error',terminal:true,result:null,error:'Old format rejection'};expect((await app.fetch(callback(worker,late))).status).toBe(200);expect(store.get('job',job.id)!.status).toBe('conflict');
  });
  test('delivery recovery preserves running request and never creates an extra turn',async()=>{
   const job=await pending();const original=store.get('job',job.id)!;
