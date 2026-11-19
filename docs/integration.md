@@ -42,3 +42,12 @@ Installing source is not activation. Keep source tests, actual Docker checks, re
 
 
 Generated apps can request scoped NStack JSON/file persistence using the supplied `context.storage` SDK and `byo-data.json` manifest. Permissions require explicit exact-version admin installation. This is a bounded data service, not arbitrary backend hosting. See `docs/nstack.md` for custody, optional managed files and activation prerequisites. Existing pipelines and grants remain immutable; new builder v5 preparation adds the scoped SDK contract.
+
+
+## Participant build requests
+
+The project workspace exposes **Build this now** to design owners as well as administrators. A participant request creates a durable linked build conversation with an explicit waiting state and no inference job. Its editable browser draft survives navigation/reload. Participants cannot enqueue implementation messages or retry implementation jobs through the API. The existing builder-v6 runtime remains operator-controlled; no new tool grant or host-execution delegation is implied by owning a design or requesting a build.
+
+An administrator can explicitly open a participant-requested conversation and operate the existing builder there. The requester can read that conversation and its generated results. Historical admin-created conversations remain admin-private; use a separate admin conversation for private notes. Versions are still visible through the design’s existing artifact history, and generating a version does not publish it to the project website.
+
+Automatic participant building requires a separately implemented, provisioned and verified isolated runtime. The current capability descriptor reports `participantBuildAvailable: false` and `hostFilesystemIsolation: false`; no environment flag can enable participant host execution. Scoped package publication and Docker package validation do not satisfy runtime isolation.

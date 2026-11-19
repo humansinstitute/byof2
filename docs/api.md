@@ -17,7 +17,7 @@ Administrative access does not transfer the design or its images to the administ
 | POST | `/api/join` | Join using `{code}` |
 | GET | `/api/settings` | Admin reads featured-event settings |
 | PATCH | `/api/settings` | Admin sets `{featuredProjectId, featuredUntil}` |
-| GET | `/api/projects/:id` | Project membership required; own designs and artifacts, admin implementation selections |
+| GET | `/api/projects/:id` | Project membership required; own designs and artifacts, accessible build conversationss |
 | PATCH | `/api/projects/:id` | Admin edits `{title, description, joinCode}` |
 | GET | `/api/projects/:id/memberships` | Admin membership list |
 | POST | `/api/projects/:id/designs` | Member creates own design and interview conversation; optional `{title}` |
@@ -25,12 +25,13 @@ Administrative access does not transfer the design or its images to the administ
 | GET | `/api/designs/:id/snapshots` | Owner/admin reads snapshot selection and artifact lineage, without interview messages |
 | PATCH | `/api/designs/:id` | Owner/admin directly edits `{title, document, expectedSnapshotId}`; creates a hidden immutable revision within the visible design milestone, stale base returns 409 |
 | POST | `/api/designs/:id/messages` | Owner/admin sends `{content, requestId, artifactVersionId?, imageIds?}`; queues interview turn |
-| POST | `/api/designs/:id/implementations` | Admin creates separate chat pinned to `{snapshotId, startingVersionId?}` |
-| GET | `/api/implementations/:id` | Admin reads pinned snapshot, implementation messages, artifact history and jobs |
+| POST | `/api/designs/:id/build` | Design owner/admin requests a pinned build with `{requestId, snapshotId}`; participant request creates a waiting conversation without a job |
+| POST | `/api/designs/:id/implementations` | Design owner/admin creates a separate chat pinned to `{snapshotId, startingVersionId?}`; participant execution remains unavailable |
+| GET | `/api/implementations/:id` | Conversation creator with design ownership, or admin, reads pinned source, messages, versions and jobs |
 | POST | `/api/implementations/:id/messages` | Admin queues `{content, requestId}` implementation turn |
-| GET | `/api/jobs/:id` | Interview owner/admin or implementation admin reads progress/recovery state |
+| GET | `/api/jobs/:id` | Interview owner/admin or authorized build-conversation creator/admin reads progress/recovery state |
 | POST | `/api/jobs/:id/recover` | Authorized actor checks original delivery with `{action:"check"}` or explicitly rebases a conflicted/failed interview using `{action:"rebase", requestId}` |
-| POST | `/api/jobs/:id/retry` | Authorized actor retries a failed job with its original immutable input |
+| POST | `/api/jobs/:id/retry` | Authorized actor retries a failed job with its original immutable input; implementation retries require an admin |
 | POST | `/api/artifacts/:id/publish` | Admin selects `{versionId}` tested version for the public site |
 | POST | `/api/pipeline-webhook` | Exact pinned Autopilot signer; signed delivery/run correlated progress or final result |
 | GET | `/api/worker/jobs` | Exact configured worker signer reads queued jobs |
@@ -78,3 +79,16 @@ Visible design numbers follow successful tested artefact registration, not inter
 `DELETE /api/projects/:id` requires a fresh admin NIP-98 signature and `{confirmTitle: "exact current project title"}`. Participant membership alone cannot delete a project. Active agent work blocks deletion with 409. Deletion archives the project with actor/time audit, clears featured admission, and revokes listing, invitation, design/app access, private previews and every public site/release/file route. Immutable designs, artefacts, site releases and NStack data remain retained for operator recovery; there is no browser restore action.
 
 `POST /api/artifacts/:id/publish` still requires an admin, an exact version belonging to that artefact and test evidence. If a Site Builder release is active, it creates a successor from the public release, revealing an existing exact-version page or adding a visible page for the selected version. Existing layout, unrelated exact versions, navigation and prior releases survive. It does not publish the private site draft. Repeating an already applied selection creates no duplicate release. Legacy project sites continue to list selected published contributions. Version metadata distinguishes `published` (legacy selection) from `sitePublished` (visible in the active site); the browser offers **Add to project site** for a previously selected but missing contribution. Existing missing contributions require that explicit publication action after activation. Site Builder rollback still selects an immutable prior release.
+
+
+## Design-to-build workspace
+
+`POST /api/designs/:id/build` accepts `{requestId, snapshotId}` from the design owner or an administrator. The exact current saved snapshot is required; a stale source or an active design/build job returns 409. The receipt is bound to actor, design route and exact body, so retries reopen the same conversation. Administrators with the builder connected atomically create an implementation conversation and queue a fixed initial build turn. Versions use the existing immutable source/starting-version lineage and remain unpublished.
+
+Participant execution is currently **unavailable**: the installed builder is an operator-controlled native host runtime with residual filesystem access. The participant endpoint creates a durable private implementation request and returns `{implementation, job: null, buildAvailable: false, reason}`. It does not enqueue work or delegate host execution. Participant implementation-message and implementation-retry routes return 503. There is no environment-only enable flag; participant execution requires a separately implemented and verified isolated runtime. `/api/me` reports `integration.participantBuildAvailable: false`, an explicit reason and `hostFilesystemIsolation: false`. Implementation reads return actor-specific `buildAvailable` and `buildBlocker`.
+
+Implementation reads and job reads require project membership, design ownership and conversation-creator ownership, or administrator access. This preserves historical administrator chats as private. Owners can see their own build requests and their design’s generated versions. Administrators can explicitly open a participant-requested conversation and perform an operator-controlled build there; that conversation’s messages are intentionally visible to its creator. Administrators should use a separate admin-created conversation for private operator notes. Site publication, sharing, branding and exact-version data installation remain administrator operations.
+
+Design reads include only accessible implementation conversations and a minimal active-job indicator. Project cards list the actor’s own designs first and, for administrators, other participants’ designs separately. Build result cards derive from the originating conversation’s job/version links. Job reads expose a separate build-result record as `resultVersionId` even when validation reuses unchanged package bytes; this is separate from site publication.
+
+The one-click action builds only the latest saved design; viewing a historical milestone or an artifact disables it with a return-to-latest action. Administrators retain **Build options** to select a historical milestone and exact starting version in a separate conversation, without automatically queuing its first turn. This preserves deliberate source selection and parallel historical admin builds while the latest-source one-click action guards against an active design/build turn.

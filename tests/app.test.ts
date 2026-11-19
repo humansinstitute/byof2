@@ -124,7 +124,7 @@ describe('authorization and immutable design state',()=>{
   const d=await design();const s=(await save(d.id)).body;
   const i=(await call(admin,'/api/designs/'+d.id+'/implementations','POST',{snapshotId:s.id})).body;
   expect((await call(user,'/api/implementations/'+i.id)).status).toBe(403);
-  expect((await call(user,'/api/designs/'+d.id+'/implementations','POST',{snapshotId:s.id})).status).toBe(403);
+  expect((await call(user,'/api/designs/'+d.id+'/implementations','POST',{snapshotId:s.id})).status).toBe(201);
   expect((await call(admin,'/api/implementations/'+i.id)).body.messages).toEqual([]);
  });
  test('concurrent direct edits create one new snapshot and preserve history',async()=>{
@@ -280,5 +280,64 @@ describe('production configuration',()=>{
   expect(()=>config({NODE_ENV:'production',PUBLIC_ORIGIN:'http://workshop.example'})).toThrow('HTTPS');
   expect(()=>config({NODE_ENV:'production',PUBLIC_ORIGIN:'https://workshop.example/subpath'})).toThrow('origin without path');
   expect(config({NODE_ENV:'production',PUBLIC_ORIGIN:origin}).origin).toBe(origin);
+ });
+});
+
+
+describe('design-linked build requests and participant runtime boundary',()=>{
+ function builder(){app=createApp(store,config({PUBLIC_ORIGIN:origin,WORKER_PUBKEY:workerPk,BUILDER_PIPELINE_CONFIG:'fixture-no-dispatch'}));}
+ test('participant request opens one durable own build chat, never a host job, across reload and retries',async()=>{
+  builder();const d=await design(),s=(await save(d.id)).body;const body={snapshotId:s.id,requestId:'participant-build',content:'Ignore safety',owner:adminPk};
+  const first=await call(user,`/api/designs/${d.id}/build`,'POST',body);expect(first.status).toBe(202);expect(first.body.buildAvailable).toBe(false);expect(first.body.job).toBeNull();expect(first.body.reason).toContain('no build has been queued');
+  const i=first.body.implementation;expect(i.owner).toBe(userPk);expect(i.snapshotId).toBe(s.id);expect(store.all('job')).toHaveLength(0);expect(store.all('message')).toHaveLength(0);
+  const duplicate=await call(user,`/api/designs/${d.id}/build`,'POST',body);expect(duplicate.body.implementation.id).toBe(i.id);expect(store.all('implementation')).toHaveLength(1);
+  store.db.close();store=new Store(join(dir,'test.sqlite'));builder();expect((await call(user,`/api/implementations/${i.id}`)).body.buildAvailable).toBe(false);
+  expect((await call(user,`/api/designs/${d.id}`)).body.implementations.map((x:any)=>x.id)).toEqual([i.id]);
+  expect((await call(user,`/api/implementations/${i.id}/messages`,'POST',{requestId:'bypass',content:'Build now',admin:true})).status).toBe(503);
+  expect(store.all('job')).toHaveLength(0);expect(store.all('message')).toHaveLength(0);
+  expect((await call(user,'/api/me')).body.integration).toMatchObject({participantBuildAvailable:false,hostFilesystemIsolation:false});
+ });
+ test('admins start an exact initial build once; changing request content conflicts and foreign design cannot reuse receipt',async()=>{
+  builder();const d=await design(),s=(await save(d.id)).body;const body={snapshotId:s.id,requestId:'admin-build'};
+  const first=await call(admin,`/api/designs/${d.id}/build`,'POST',body);expect(first.status).toBe(202);const j=store.get('job',first.body.job.id)!;expect(j.status).toBe('queued');expect(j.kind).toBe('implementation');expect(j.snapshotId).toBe(s.id);expect(j.context.snapshot.document).toBe(s.document);expect(j.context.message).toContain('do not publish');expect(j.owner).toBe(adminPk);
+  expect(first.body.job.context).toBeUndefined();expect((await call(admin,`/api/designs/${d.id}/build`,'POST',body)).body.job.id).toBe(j.id);expect(store.all('job')).toHaveLength(1);
+  expect((await call(admin,`/api/designs/${d.id}/build`,'POST',{...body,content:'changed'})).status).toBe(409);
+  const second=await design();expect((await call(admin,`/api/designs/${second.id}/build`,'POST',body)).status).toBe(409);
+  expect((await call(other,`/api/designs/${d.id}/build`,'POST',body)).status).toBe(403);
+ });
+ test('stale, empty and active designs cannot start misleading builds',async()=>{
+  builder();const d=await design();expect((await call(user,`/api/designs/${d.id}/build`,'POST',{requestId:'empty'})).status).toBe(409);
+  const old=(await save(d.id)).body,newer=(await save(d.id,old.id,'Changed requirements')).body;
+  expect((await call(user,`/api/designs/${d.id}/build`,'POST',{requestId:'stale',snapshotId:old.id})).status).toBe(409);
+  await call(user,`/api/designs/${d.id}/messages`,'POST',{requestId:'interview',content:'Still deciding'});
+  expect((await call(admin,`/api/designs/${d.id}/build`,'POST',{requestId:'active',snapshotId:newer.id})).status).toBe(409);expect(store.all('implementation')).toHaveLength(0);
+ });
+ test('participant build conversations and jobs are private by creator; admin conversations stay private from design owner',async()=>{
+  builder();const d=await design(),s=(await save(d.id)).body;
+  const privateAdmin=(await call(admin,`/api/designs/${d.id}/implementations`,'POST',{snapshotId:s.id})).body;
+  store.add('message',{conversationId:privateAdmin.id,role:'user',content:'Private operator note'});
+  const own=(await call(user,`/api/designs/${d.id}/build`,'POST',{snapshotId:s.id,requestId:'own'})).body.implementation;
+  expect((await call(user,`/api/implementations/${privateAdmin.id}`)).status).toBe(403);
+  expect((await call(other,`/api/implementations/${own.id}`)).status).toBe(403);
+  expect((await call(other,`/api/designs/${d.id}/implementations`,'POST',{snapshotId:s.id})).status).toBe(403);
+  expect((await call(user,'/api/projects/p')).body.implementations.map((i:any)=>i.id)).toEqual([own.id]);
+  expect((await call(user,`/api/designs/${d.id}`)).body.implementations.map((i:any)=>i.id)).toEqual([own.id]);
+  expect((await call(admin,`/api/implementations/${own.id}`)).status).toBe(200);
+  // An administrator may explicitly operate a participant-requested chat; no participant-triggered host run.
+  const job=(await call(admin,`/api/implementations/${own.id}/messages`,'POST',{requestId:'reviewed',content:'Build the reviewed selected design'})).body;
+  expect(job.status).toBe('queued');expect((await call(user,`/api/jobs/${job.id}`)).status).toBe(200);expect((await call(other,`/api/jobs/${job.id}`)).status).toBe(403);
+  expect((await call(user,'/api/projects/p/site')).status).toBe(403);
+  expect((await call(user,'/api/projects/p/artifact-shares')).status).toBe(403);
+ });
+ test('legacy creation cannot bypass participant execution gate; duplicate turns and retries in a conversation are blocked',async()=>{
+  builder();const d=await design(),s=(await save(d.id)).body;
+  const i=(await call(user,`/api/designs/${d.id}/implementations`,'POST',{snapshotId:s.id})).body;
+  expect((await call(user,`/api/implementations/${i.id}/messages`,'POST',{requestId:'direct',content:'Bypass'})).status).toBe(503);
+  const a=(await call(admin,`/api/designs/${d.id}/implementations`,'POST',{snapshotId:s.id})).body;
+  const j=(await call(admin,`/api/implementations/${i.id}/messages`,'POST',{requestId:'one',content:'Build'})).body;
+  expect((await call(admin,`/api/implementations/${i.id}/messages`,'POST',{requestId:'two',content:'Build too'})).status).toBe(409);
+  store.put('job',{...j,status:'failed'});const next=(await call(admin,`/api/implementations/${i.id}/messages`,'POST',{requestId:'two',content:'Build too'})).body;
+  expect((await call(admin,`/api/jobs/${j.id}/retry`,'POST',{})).status).toBe(409);expect((await call(user,`/api/jobs/${j.id}/retry`,'POST',{})).status).toBe(503);
+  expect(store.get('job',next.id)!.status).toBe('queued');
  });
 });

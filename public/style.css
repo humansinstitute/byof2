@@ -40,3 +40,59 @@ body:has(.workspace-shell){height:100dvh;display:flex;flex-direction:column}body
 /* Pending pasted references occupy the attachment row until upload completes. */
 .interview-images .image-upload-placeholder{display:flex;align-items:center;min-height:64px;padding:12px 16px;color:var(--muted);border:1px dashed var(--line);border-radius:8px;font-size:.8rem}
 .interview-images [data-image-status]:empty{display:none}
+
+/* Project workspaces share one compact header and one card system. */
+body:has(.project-workspace,.site-builder) .topbar{padding:9px 24px}
+.project-workspace,.site-builder{padding-top:16px}
+.project-workspace .crumb,.site-builder .crumb{margin-bottom:12px}
+.project-views,.design-modes{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 20px}
+.project-views a,.design-modes a,.design-modes>span{padding:9px 13px;border-radius:7px;font-size:.83rem;text-decoration:none;line-height:1.4}
+.project-views a,.design-modes a{border:1px solid var(--line);background:var(--paper)}
+.project-views [aria-current=page]{background:var(--green);color:#fff;border-color:var(--green)}
+.project-card-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:14px 0}
+.project-work-card{min-width:0;display:flex;flex-direction:column;align-items:flex-start;padding:21px;gap:10px;overflow-wrap:anywhere;text-decoration:none;color:inherit}
+.project-work-card h3{font-size:1.03rem;line-height:1.45;margin:0}
+.project-work-card h3 a{text-decoration:none;color:inherit}
+.project-work-card h3 a:hover{text-decoration:underline}
+.project-work-card .eyebrow,.project-work-card p{margin:0}
+.project-work-card .eyebrow{font-size:.65rem}
+.project-work-card .card-actions,.project-work-card>.row{margin-top:auto;padding-top:10px;display:flex;flex-wrap:wrap;gap:8px;width:100%}
+.project-work-card .small,.project-work-card button{font-size:.78rem;min-height:40px;white-space:normal;text-decoration:none}
+.project-work-card .card-action{margin-top:auto;font-size:.8rem;padding-top:10px}
+.project-workspace .section-row{margin-top:25px}
+.design-owner{font-family:ui-monospace,monospace;font-size:.7rem}
+.workspace-shell .design-modes{margin:0 0 8px;flex-shrink:0}
+.design-modes a,.design-modes>span{padding:5px 10px;font-size:.75rem}
+.design-modes [aria-current=page]{background:#eee8f3;border-color:#a896bc;color:#513b6b}
+.build-workspace .design-modes [aria-current=page]{background:#24372e;color:#f6f4e8;border-color:#24372e}
+.build-now{font-size:.8rem;padding:7px 12px;min-height:38px}
+.build-readiness{margin:0 0 7px;font-size:.72rem}
+.build-conversation-picker{display:flex;align-items:center;gap:10px;font-size:.72rem;margin:0 0 8px}
+.build-conversation-picker select{margin:0;padding:6px;max-width:350px;min-height:32px;font-size:.72rem}
+/* The build conversation deliberately changes tone; previews keep their own colours. */
+.build-workspace .chat-panel{background:#1d2a24;border-color:#30463a;color:#f4f4e9}
+.build-workspace .chat-panel .panel-head{background:#18241e;border-color:#405247;color:#fbf8e9}
+.build-workspace .chat-panel .muted,.build-workspace .chat-panel .help,.build-workspace .chat-panel .speaker{color:#bfcebf}
+.build-workspace .message.user{background:#34483b;color:#fffbed}
+.build-workspace .composer{background:#18241e;border-color:#405247}
+.build-workspace .composer textarea{background:#2d4034;color:#fffbed;border:1px solid #586d5e}
+.build-workspace .composer textarea::placeholder{color:#c1cbbc}
+.build-workspace .composer .send{background:#e5d898;color:#1b2a21;border-color:#e5d898}
+.build-workspace .progress{background:#2c4033;color:#f4f4e9;border-color:#586d5e}
+.build-workspace .chat-panel button.small{background:#344d3c;color:#fffbed;border-color:#829884}
+.build-workspace .chat-panel .error-box{background:#4f3028;color:#ffe9d9}
+.build-workspace .chat-panel .markdown-content a{color:#e5d898}
+.build-workspace .chat-panel .markdown-content code,.build-workspace .chat-panel .markdown-content pre{background:#304238;color:#f4f4e9;border-color:#586d5e}
+.build-workspace .chat-panel .markdown-content th{background:#304238}
+.build-workspace .chat-panel .markdown-content td,.build-workspace .chat-panel .markdown-content th{border-color:#829884}
+.build-workspace .chat-panel .markdown-content blockquote{color:#d4decf}
+.build-result{white-space:normal;background:#2d4034;border:1px solid #829884;border-radius:9px;padding:14px;margin:14px 0;overflow-wrap:anywhere}
+.build-result .eyebrow{color:#e5d898;font-size:.65rem;margin:0 0 7px}
+.build-result h3{font-size:.94rem;margin:0 0 7px}
+.build-result p{font-size:.76rem;line-height:1.5;margin:0 0 10px}
+@media(max-width:1050px){.project-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.project-card-grid{grid-template-columns:minmax(0,1fr)}body:has(.project-workspace,.site-builder) .topbar{padding:6px 12px}.project-workspace .section-row{flex-wrap:wrap;gap:10px}.project-work-card{padding:18px}.project-work-card .card-actions a{flex:1;text-align:center}.project-views a{flex:1;text-align:center}.build-now{font-size:.74rem;min-height:36px}.build-conversation-picker{align-items:stretch;flex-direction:column;gap:4px}.build-conversation-picker select{max-width:100%;width:100%}.workspace-shell .implementation-banner{max-height:62px;overflow:auto}.design-modes a,.design-modes>span{font-size:.7rem;padding:4px 7px}.build-workspace .panel-head>.muted{max-width:150px;text-align:right;font-size:.65rem!important}}
+
+.build-unavailable{background:#24372e;color:#fffbed;border:1px solid #738775;border-radius:8px;padding:10px 14px;margin:0 0 8px;font-size:.79rem;flex-shrink:0}.build-unavailable p{margin:5px 0;line-height:1.5}.build-unavailable a{color:#f2e4a7}.build-workspace .chat-panel button:disabled{opacity:.6;cursor:not-allowed}@media(max-width:600px){.build-unavailable{padding:8px 10px;font-size:.72rem}.build-unavailable p{max-height:50px;overflow:auto}}
+.workspace-heading .row{flex-wrap:wrap;max-width:100%}
+@media(max-width:600px){.workspace-heading .row{gap:5px}.workspace-heading .row .small{min-height:32px}.design-owner{font-family:inherit}}
