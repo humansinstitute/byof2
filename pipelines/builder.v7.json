@@ -1,0 +1,97 @@
+{
+  "name": "byofreedom-builder-v7",
+  "version": 7,
+  "enabled": true,
+  "input": {
+    "settings": {
+      "publicOrigin": "https://byo-freedom.b.otherstuff.ai"
+    }
+  },
+  "description": "Operator-controlled builder with authoritative NStack records/files/policy context and exact-version scoped SDK permissions. Public run-bound commentary and tool activity callbacks.",
+  "steps": [
+    {
+      "name": "Prepare pinned implementation",
+      "type": "code",
+      "function": "byofreedom.prepareBuilder.v5",
+      "input": {
+        "pick": {
+          "job": "$.job"
+        }
+      },
+      "assign": "$.nativeRequest",
+      "description": "Pin immutable design, actual NStack capabilities and SDK into dedicated admin workdir.",
+      "display": {
+        "out": [
+          {
+            "label": "Conversation",
+            "path": "$.conversationKey",
+            "format": "text"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Implement with admin",
+      "type": "code",
+      "function": "session.completedTurn",
+      "agentTools": {
+        "byofreedom.publish": "byofreedom.agentPublish.v4"
+      },
+      "input": {
+        "pick": {
+          "conversationKey": "$.nativeRequest.conversationKey",
+          "requestId": "$.nativeRequest.requestId",
+          "projectId": "$.nativeRequest.projectId",
+          "directory": "$.nativeRequest.directory",
+          "prompt": "$.nativeRequest.prompt"
+        }
+      },
+      "assign": "$.turn",
+      "description": "Native independent implementation conversation with scoped explicit publication.",
+      "display": {
+        "out": [
+          {
+            "label": "Reply",
+            "path": "$.reply",
+            "format": "text"
+          },
+          {
+            "label": "Status",
+            "path": "$.status",
+            "format": "text"
+          }
+        ]
+      },
+      "activityWebhook": {
+        "url": "https://byo-freedom.b.otherstuff.ai/api/agent-activity",
+        "correlation": {
+          "jobId": "$.job.id",
+          "requestId": "$.job.requestId",
+          "projectId": "$.job.projectId",
+          "designId": "$.job.designId",
+          "conversationId": "$.job.conversationId"
+        }
+      }
+    },
+    {
+      "name": "Return conversational final",
+      "type": "code",
+      "function": "byofreedom.finishBuilder.v2",
+      "input": {
+        "pick": {
+          "turn": "$.turn"
+        }
+      },
+      "description": "The reply is independent of tool publication receipts.",
+      "display": {
+        "out": [
+          {
+            "label": "Reply",
+            "path": "$.response",
+            "format": "text"
+          }
+        ]
+      }
+    }
+  ]
+}

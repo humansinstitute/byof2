@@ -96,3 +96,5 @@ body:has(.project-workspace,.site-builder) .topbar{padding:9px 24px}
 .build-unavailable{background:#24372e;color:#fffbed;border:1px solid #738775;border-radius:8px;padding:10px 14px;margin:0 0 8px;font-size:.79rem;flex-shrink:0}.build-unavailable p{margin:5px 0;line-height:1.5}.build-unavailable a{color:#f2e4a7}.build-workspace .chat-panel button:disabled{opacity:.6;cursor:not-allowed}@media(max-width:600px){.build-unavailable{padding:8px 10px;font-size:.72rem}.build-unavailable p{max-height:50px;overflow:auto}}
 .workspace-heading .row{flex-wrap:wrap;max-width:100%}
 @media(max-width:600px){.workspace-heading .row{gap:5px}.workspace-heading .row .small{min-height:32px}.design-owner{font-family:inherit}}
+
+.agent-activity{padding:12px 18px;border-top:1px solid var(--line,#d8ddd3);max-height:210px;overflow:auto;font-size:.9rem;background:rgba(120,139,113,.07)}.activity-heading{font-weight:600;margin-bottom:6px}.agent-activity ol{list-style:none;margin:0;padding:0}.agent-activity li{display:flex;gap:8px;padding:4px 0;white-space:pre-wrap;overflow-wrap:anywhere}.activity-indicator{opacity:.6;flex:none}.agent-activity .help{margin:7px 0 0;font-size:.75rem}

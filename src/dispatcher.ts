@@ -1,7 +1,7 @@
 import {createRemotePipelines,type RemotePipelineConfig} from '../integration/remote-pipelines';
 import {Store,type Row} from './store';
 import {createInterviewImageAccess} from './interview-image-access';
-export const pipelineJobInput=(j:Row)=>({id:j.id,kind:j.kind,conversationId:j.conversationId,projectId:j.projectId,designId:j.designId,snapshotId:j.snapshotId,startingVersionId:j.startingVersionId,context:j.context});
+export const pipelineJobInput=(j:Row)=>({id:j.id,requestId:j.requestId,kind:j.kind,conversationId:j.conversationId,projectId:j.projectId,designId:j.designId,snapshotId:j.snapshotId,startingVersionId:j.startingVersionId,context:j.context});
 export const shouldRetryDelivery=(j:Row,delivery:any)=>delivery?.status==='failed'&&(j.recoveryRequestedAt||0)>(j.lastDeliveryRetryAt||0);
 export const pipelineBinding=(cfg:RemotePipelineConfig)=>({definitionId:cfg.definitionId,installationId:cfg.installationId,appId:cfg.appId,ownerNpub:cfg.ownerNpub,origin:cfg.origin,clientOrigin:cfg.clientOrigin,callbackUrl:cfg.callbackUrl,appPubkey:cfg.appPubkey});
 export function startDispatcher(store:Store,env=process.env,createClient:typeof createRemotePipelines=createRemotePipelines){

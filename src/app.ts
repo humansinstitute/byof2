@@ -1,3 +1,4 @@
+import {verifyAgentActivity,acceptAgentActivity,activityForJob} from './agent-activity';
 import {createArtifactSharing} from './artifact-sharing';
 import {storeInterviewImage} from './interview-storage';
 import {readFileSync} from 'node:fs';
@@ -37,7 +38,7 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
  const implementations=(pk:string,designId:string)=>store.all('implementation').filter(i=>i.designId===designId&&(i.owner===pk||ADMINS.includes(pk)));
  const activeJob=(designId:string)=>store.all('job').find(j=>j.designId===designId&&['queued','running','dispatching','uncertain'].includes(j.status));
  const messages=(id:string)=>store.all('message').filter(m=>m.conversationId===id);
- const jobs=(id:string)=>store.all('job').filter(m=>m.conversationId===id).map(({context,...j})=>({...j,resultVersionId:store.get('buildResult',j.id)?.versionId}));
+ const jobs=(id:string)=>store.all('job').filter(m=>m.conversationId===id).map(({context,activityBinding,...j})=>({...j,activity:activityForJob(store,j),resultVersionId:store.get('buildResult',j.id)?.versionId}));
  const participantBuildBlocker='Your build conversation is ready. Building is waiting for a safely isolated participant runtime; no build has been queued. Your design is saved.';
  const snapshot=lifecycle.save;
  function enqueue(pk:string,conversation:Row,b:any,kind:string){
@@ -86,6 +87,11 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
    if(path.startsWith('/preview/')||path.startsWith('/sites/'))return publicSite(path);
    if(path==='/site-preview-host'&&method==='GET')return new Response(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Private site preview</title><style>html,body,iframe{margin:0;border:0;width:100%;height:100%;display:block}</style></head><body><iframe title="Private draft site" sandbox="allow-scripts allow-forms allow-downloads"></iframe><script>addEventListener('message',event=>{if(event.source!==parent||event.data?.type!=='byo-site-preview'||typeof event.data.html!=='string')return;document.querySelector('iframe').srcdoc=event.data.html;});</script></body></html>`,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store','referrer-policy':'no-referrer','x-content-type-options':'nosniff','content-security-policy':"sandbox allow-scripts allow-forms allow-downloads; default-src 'none'; script-src 'unsafe-inline' data: blob:; style-src 'unsafe-inline' data:; img-src https: data: blob:; frame-src 'self' data: blob:; connect-src https: wss:; font-src data:; base-uri 'none'; form-action 'none'"}});
    if(!path.startsWith('/api/')){const file=path==='/app.js'?Bun.file('dist/app.js'):path==='/style.css'?Bun.file('public/style.css'):Bun.file('dist/index.html');return new Response(file,{headers:{'content-security-policy':`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' https://blossom.primal.net wss://relay.damus.io wss://nos.lol wss://relay.primal.net; frame-src 'self' ${cfg.origin}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`,'x-content-type-options':'nosniff','cache-control':path==='/app.js'||path==='/style.css'?'no-cache':'no-store'}});}
+   if(path==='/api/agent-activity'&&method==='POST'){
+    need(cfg.webhookPubkey,503,'Webhook signer not configured');
+    let verified;try{verified=await verifyAgentActivity(req,cfg.origins.map(origin=>origin+path),cfg.webhookPubkey);}catch(error){if(error instanceof HttpError)throw error;throw new HttpError(401,'Invalid activity callback');}
+    return json(acceptAgentActivity(store,verified.event,verified.fingerprint));
+   }
    if(path==='/api/pipeline-webhook'&&method==='POST'){
     need(cfg.webhookPubkey,503,'Webhook signer not configured');
     let verified;try{verified=await verifyPipelineCallback(req,{url:cfg.origin+path,urlAliases:cfg.origins.slice(1).map(origin=>origin+path),pubkey:cfg.webhookPubkey});}catch{throw new HttpError(401,'Invalid pipeline callback');}
@@ -189,7 +195,7 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
    }
    if(p[1]==='jobs'){
     const j=read('job',id);if(j.kind==='implementation')implementationAccess(pk,read('implementation',j.conversationId));else owner(pk,j.designId);
-    if(method==='GET')return json({...j,context:undefined,resultVersionId:store.get('buildResult',j.id)?.versionId});
+    if(method==='GET')return json({...j,context:undefined,activityBinding:undefined,resultVersionId:store.get('buildResult',j.id)?.versionId});
     if(p[3]==='recover'&&method==='POST')return json(store.transaction(()=>{
      const action=b.action||'check';
      if(action==='check'){need(['running','uncertain','dispatching','queued'].includes(j.status),409,'Job does not need delivery recovery');return store.put('job',{...j,recoveryRequestedAt:Date.now(),lastPollAt:0,progress:'Checking managed run and delivery; original request preserved'});}
