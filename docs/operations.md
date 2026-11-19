@@ -59,6 +59,8 @@ Reverting an image does not restore data. Never delete the persistent volume dur
 
 ## Recovery and limitations
 
+Browser identity encryption, verified migration, automatic return login, explicit signout, recovery and origin/private-browsing limits are documented in [browser-identity.md](browser-identity.md). Browser shutdown alone does not normally clear storage; changing origins does not transfer an identity.
+
 Queued/running/uncertain/failed work is visible in app jobs. Match retry and callback receipts to original request/run IDs. A stale design callback must be reconciled against the newer saved design instead of overwriting it. Exact publication receipts protect version creation on retries. External service CORS or availability can prevent browser integrations even when the app itself works. Contributions requiring their own backend need an explicit separate runtime decision.
 
 Participant inference must not inherit host shell/filesystem/admin authority. Scope-limited publication brokers are not evidence of host filesystem isolation. Keep the real activated runtime's isolation evidence and any remaining limits explicit; do not replace it with prompt-only assurances.
