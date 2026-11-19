@@ -32,7 +32,7 @@ test('signed design/build/publication adds missing item to released website and 
   expect(await (await f.publicGet(`/sites/${p.id}/`)).text()).not.toContain(d.title);
   expect((await f.call(`/api/artifacts/${v.artifactId}/publish`,'POST',{versionId:v.versionId},f.participant)).status).toBe(403);
   const published=await f.json(`/api/artifacts/${v.artifactId}/publish`,'POST',{versionId:v.versionId});
-  const html=await (await f.publicGet(`/sites/${p.id}/`)).text();expect(html).toContain(d.title);expect(html).toContain('Earlier contribution');expect(html).toContain('Resource library');expect(html).not.toContain('Private unpublished change');
+  const html=await (await f.publicGet(`/sites/${p.id}/`)).text();expect(html).toContain(d.title);expect(html).toContain('Earlier contribution');expect(html).toContain('data-site-layout="resource-library"');expect(html).not.toContain('Private unpublished change');
   const successor=f.store.get('siteRelease',published.siteReleaseId)!;expect(successor.previousReleaseId).toBe(first.publishedReleaseId);expect(successor.pages[0]).toEqual(draft.pages[0]);
   const newPage=successor.pages[1];expect(await (await f.publicGet(`/sites/${p.id}/page/${newPage.slug}/_files/index.html`)).text()).toContain('counter.onclick');
   expect(f.store.get('version',v.versionId)).toEqual(originalVersion);expect(originalVersion.snapshotId).toBe(snapshot.id);expect(f.store.get('snapshot',snapshot.id)!.document).toBe('Build a counter with no accounts.');
