@@ -17,7 +17,7 @@ import {createInterviewImageAccess} from './interview-image-access';
 import {agentStorageContext} from './agent-storage-context';
 const text=(v:any,max=50000)=>{need(typeof v==='string'&&v.trim().length>0&&v.length<=max,400,'Text is required or too long');return v.trim() as string;};
 const escape=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NStackTransport;nstackFiles?:NStackFiles;nstackConnections?:NStackConnectionHint[]}={}){
+export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NStackTransport;nstackFiles?:NStackFiles;nstackConnections?:NStackConnectionHint[];interviewStorage?:{put:(actor:string,designId:string,imageId:string)=>Promise<{objectId:string;storage:'nstack-private'}>}}={}){
  const browserOperations=createBrowserOperations();
  const nstack=createNStack(store,{transport:options.nstackTransport,files:options.nstackFiles,connections:options.nstackConnections});
  const siteBuilder=createSiteBuilder(store);
@@ -155,7 +155,7 @@ export function createApp(store:Store,cfg= config(),options:{nstackTransport?:NS
     if(p[3]==='snapshots'&&method==='GET'){member(pk,d.projectId);need(d.owner===pk||ADMINS.includes(pk),403,'Design access denied');return json({design:d,snapshots:store.all('snapshot').filter(s=>s.designId===id),milestones:lifecycle.history(id),artifacts:artifacts(id)});}
     if(p[3]==='implementations'&&method==='POST'){admin(pk);member(pk,d.projectId);const s=read('snapshot',b.snapshotId);need(s.designId===id,400,'Snapshot does not belong to design');if(b.startingVersionId)need(read('version',b.startingVersionId).designId===id,400,'Starting artifact belongs to another design');return json(store.add('implementation',{projectId:d.projectId,designId:id,snapshotId:s.id,startingVersionId:b.startingVersionId||null,owner:pk}),201);}
     owner(pk,id);
-    if(p[3]==='images'&&p.length===4&&method==='POST'){need(cfg.interviewImagesEnabled,503,'Image interviews are not active yet');const image=interviewImages.upload(pk,id,b);const s=nstack.getSettings();if(s.connection?.mode!=='browser-user')return json({...image,storage:'app-private'},201);
+    if(p[3]==='images'&&p.length===4&&method==='POST'){need(cfg.interviewImagesEnabled,503,'Image interviews are not active yet');const image=interviewImages.upload(pk,id,b);if(options.interviewStorage)return json({...image,...await options.interviewStorage.put(pk,id,image.id)},201);const s=nstack.getSettings();if(s.connection?.mode!=='browser-user')return json({...image,storage:'app-private'},201);
      const c=s.connection;const guard=()=>{owner(pk,id);need(nstack.getSettings().revision===s.revision&&JSON.stringify(nstack.getSettings().connection)===JSON.stringify(c),409,'NStack connection changed; retry image upload');};const plan={...c,mode:'interview-images' as const,image:{id:image.id,designId:id,sha256:image.sha256,bytes:image.bytes,name:image.name,mimeType:image.mimeType}};
      return json(await browserOperations.start(pk,plan,async transport=>{const raw=store.get('interviewImage',image.id)!;const result=await storeInterviewImage(store,c,(_c,r)=>transport(plan as any,r),raw,d,pk,guard,s.revision);return {...image,...result};},guard));}
     if(p[3]==='images'&&p.length===5&&method==='GET'){const image=interviewImages.context(pk,id,[p[4]!])[0]!;return json({id:image.id,mimeType:image.mimeType,base64:image.base64,sha256:image.sha256});}

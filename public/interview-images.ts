@@ -11,7 +11,7 @@ export function clearDraftImages(id:string){localStorage.removeItem(key(id));upl
 export function imageUploadBusy(id:string){return uploading.has(id);}
 export function imageComposer(id:string,enabled:boolean,working:boolean){
  if(!enabled)return '';
- return `<div class="interview-images" data-interview-images><div data-image-drafts></div><div class="image-toolbar"><button type="button" class="small ghost" data-select-image aria-label="Attach private reference images" ${working||uploading.has(id)?'disabled':''}>＋ Image</button><input class="visually-hidden" type="file" data-image-upload accept="image/png,image/jpeg,image/webp" multiple aria-label="Choose private reference images" ${working||uploading.has(id)?'disabled':''}><span class="help" data-image-status role="status">${escape(uploadStatus.get(id)||(uploading.has(id)?'Uploading private image…':'Paste an image here · up to two private images'))}</span></div></div>`;
+ return `<div class="interview-images" data-interview-images><div data-image-drafts aria-live="polite" aria-label="Pending attachments"></div><input class="visually-hidden" type="file" data-image-upload accept="image/png,image/jpeg,image/webp" multiple aria-label="Private reference images" tabindex="-1" ${working||uploading.has(id)?'disabled':''}><span class="help" data-image-status role="status">${escape(uploading.has(id)?'':uploadStatus.get(id)||'')}</span></div>`;
 }
 export function imageReferences(images:unknown){return Array.isArray(images)?images.map(i=>`<button type="button" class="small" data-view-image="${escape(i.id)}">View ${escape(i.name||'reference image')}</button>`).join(' '):'';}
 /** Re-encode browser-selected visual pixels: strip metadata and admit no active format. */
@@ -47,24 +47,24 @@ export function mountInterviewImages(api:Api,id:string,enabled:boolean,working:b
   if(!form.isConnected)return;
   message.required=draftImages(id).length===0;
   const target=form.querySelector('[data-image-drafts]')!;
-  target.innerHTML=draftImages(id).map(i=>`<div class="image-draft"><button type="button" class="image-preview" data-preview-image="${escape(i.id)}" aria-label="Preview ${escape(i.name)}"><img alt="${escape(i.name)}" ${thumbnails.has(i.id)?`src="${thumbnails.get(i.id)}"`:''}></button><span class="help">${escape(i.name)}</span><button type="button" class="small ghost" data-remove-image="${escape(i.id)}" aria-label="Remove ${escape(i.name)}" ${working?'disabled':''}>Remove</button></div>`).join('');
-  target.querySelectorAll<HTMLElement>('[data-remove-image]').forEach(button=>button.addEventListener('click',()=>{localStorage.setItem(key(id),JSON.stringify(draftImages(id).filter(i=>i.id!==button.dataset.removeImage)));if(!draftImages(id).length&&!uploading.has(id)){uploadStatus.delete(id);status.textContent='Paste an image here · up to two private images';}render();}));
+  target.innerHTML=draftImages(id).map(i=>`<div class="image-draft"><button type="button" class="image-preview" data-preview-image="${escape(i.id)}" aria-label="Preview ${escape(i.name)}"><img alt="${escape(i.name)}" ${thumbnails.has(i.id)?`src="${thumbnails.get(i.id)}"`:''}></button><span class="help">${escape(i.name)}</span><button type="button" class="small ghost" data-remove-image="${escape(i.id)}" aria-label="Remove ${escape(i.name)}" ${working?'disabled':''}>Remove</button></div>`).join('')+(uploading.has(id)?'<div class="image-draft image-upload-placeholder" role="status" aria-busy="true">Uploading image…</div>':'');
+  target.querySelectorAll<HTMLElement>('[data-remove-image]').forEach(button=>button.addEventListener('click',()=>{localStorage.setItem(key(id),JSON.stringify(draftImages(id).filter(i=>i.id!==button.dataset.removeImage)));if(!draftImages(id).length&&!uploading.has(id)){uploadStatus.delete(id);status.textContent='';}render();}));
   target.querySelectorAll<HTMLElement>('[data-preview-image]').forEach(button=>button.addEventListener('click',()=>{const src=thumbnails.get(button.dataset.previewImage!);if(src)modal('Private reference image',`<img alt="Private reference" src="${src}" style="max-width:100%">`);}));
  };
  const loadThumbnails=async()=>{for(const i of draftImages(id)){if(thumbnails.has(i.id))continue;try{const image=await api(`/api/designs/${id}/images/${encodeURIComponent(i.id)}`);if(!['image/png','image/jpeg'].includes(image.mimeType)||typeof image.base64!=='string'||!/^[A-Za-z0-9+/=]+$/.test(image.base64)||image.base64.length>2800000)throw Error('Invalid image');thumbnails.set(i.id,`data:${image.mimeType};base64,${image.base64}`);render();}catch{if(form.isConnected)status.textContent='Preview unavailable. Remove and reattach the image, or retry after reconnecting.';}}};
  render();void loadThumbnails();
  form.querySelector('[data-select-image]')?.addEventListener('click',()=>input.click());
- const update=()=>{if(!form.isConnected){document.removeEventListener('byo-image-drafts',changed);return;}render();void loadThumbnails();input.disabled=working||uploading.has(id);form.querySelector<HTMLButtonElement>('[data-select-image]')!.disabled=input.disabled;form.querySelector<HTMLButtonElement>('[type=submit]')!.disabled=input.disabled;if(uploadStatus.has(id))status.textContent=uploadStatus.get(id)!;};
+ const update=()=>{if(!form.isConnected){document.removeEventListener('byo-image-drafts',changed);return;}render();void loadThumbnails();input.disabled=working||uploading.has(id);form.querySelector<HTMLButtonElement>('[type=submit]')!.disabled=input.disabled;status.textContent=uploading.has(id)?'':uploadStatus.get(id)||'';};
  const changed=(event:Event)=>{if((event as CustomEvent).detail===id)update();};document.addEventListener('byo-image-drafts',changed);unmountDraftListener=()=>document.removeEventListener('byo-image-drafts',changed);
  const report=(text:string)=>{uploadStatus.set(id,text);notify(id);};
  const upload=async(files:File[])=>{
   if(!files.length||working||uploading.has(id))return;
   if(draftImages(id).length+files.length>2){report('Choose at most two images per message.');input.value='';return;}
-  uploading.add(id);input.disabled=true;const select=form.querySelector<HTMLButtonElement>('[data-select-image]')!;select.disabled=true;
+  uploading.add(id);input.disabled=true;notify(id);
   const submit=form.querySelector<HTMLButtonElement>('[type=submit]')!;submit.disabled=true;
   try{for(const file of files){report('Uploading private image…');const image=await api(`/api/designs/${id}/images`,'POST',await normaliseImage(file));localStorage.setItem(key(id),JSON.stringify([...draftImages(id),image]));render();}report('Images ready. Send your message when you are ready.');}
   catch(error){report((error as Error).message);}
-  finally{uploading.delete(id);input.disabled=working;select.disabled=working;input.value='';submit.disabled=working;notify(id);}
+  finally{uploading.delete(id);input.disabled=working;input.value='';submit.disabled=working;notify(id);}
  };
  input.addEventListener('change',()=>void upload(Array.from(input.files??[])));
  message.addEventListener('paste',event=>{

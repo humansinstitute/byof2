@@ -16,3 +16,27 @@ body:has(.workspace-shell){height:100dvh;display:flex;flex-direction:column}body
 @media(max-width:800px){.workspace{grid-template-columns:minmax(0,1fr);gap:0}.workspace-heading{flex-wrap:wrap;gap:5px}.workspace-heading .row{margin-left:auto}.workspace-heading h1{font-size:1rem}.workspace-shell{padding:5px 10px 8px}.workspace-shell .mobile-tabs{margin-bottom:6px}.workspace-shell .mobile-tabs button{padding:5px;min-height:32px}.workspace .panel-head{padding:6px 10px}.workspace .messages{padding:12px}.workspace .history{max-height:85px}.composer-footer .help{font-size:.65rem}.workspace-shell .crumb{margin-bottom:0}.project-title-row{gap:10px}.site-link{font-size:.76rem;padding:10px;max-width:145px}.shell:has(.project-heading){padding-top:15px}.shell:has(.project-heading) .crumb{margin-bottom:10px}body:has(.workspace-shell) .topbar{padding:5px 12px}.workspace .preview-panel .panel-head .small{padding:5px 7px;font-size:.7rem;min-height:32px}}
 
 .artifact-library{margin:28px 0}.library-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;margin:14px 0}.library-card{min-width:0;overflow-wrap:anywhere}.library-card h3{margin-top:0}.library-card .row{flex-wrap:wrap}.library-preview{border:1px solid var(--line);width:100%;height:48dvh;min-height:200px;background:white}.import-reference{border:1px solid var(--line);border-radius:7px;padding:7px 10px;margin-bottom:8px;font-size:.78rem;flex-shrink:0;overflow-wrap:anywhere;max-height:36dvh;overflow:auto}.import-reference>.help{display:block;margin:2px 0}.import-reference summary{cursor:pointer;margin-top:3px}.import-reference iframe{display:block;border:0;width:100%;height:200px;background:white}.import-reference details p{margin:7px 0}.artifact-library button{white-space:normal}@media(max-width:800px){.import-reference{font-size:.7rem;padding:5px 8px;margin-bottom:5px}.import-reference>.help{display:none}.library-card .row button{flex:1 1 100%}}
+
+/* Site Builder tabs: scoped so workshop and sharing layouts stay independent. */
+.site-builder .site-tabs{display:flex;gap:.4rem;border-bottom:1px solid var(--line,#d8d8d8);margin:1.5rem 0;overflow-x:auto;padding-bottom:.5rem}
+.site-builder .site-tabs button{white-space:nowrap;min-height:44px}
+.site-builder .site-tabs [aria-selected=true]{background:var(--text,#17241f);color:var(--bg,#fff)}
+.site-builder .site-tab-panel[hidden]{display:none}
+.site-builder .site-tab-panel{min-width:0}
+.site-builder .site-tab-panel .site-brand{position:static;max-width:none}
+.site-builder .site-tool-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:1rem}
+.site-builder .site-tool-card{min-width:0;display:flex;flex-direction:column;gap:.7rem}
+.site-builder .site-tool-card h3{margin:0}
+.site-builder .site-tool-visual{height:180px;overflow:hidden;background:#edf1ee;border-radius:8px;display:grid;place-items:center}
+.site-builder .site-tool-visual iframe{width:100%;height:100%;border:0;pointer-events:none}
+.site-builder .site-drag-handle{cursor:grab;max-width:100%;overflow-wrap:anywhere;text-align:left;min-height:44px}
+.site-builder .site-page-options{margin-top:1rem}
+.site-builder .site-page-options summary{cursor:pointer;padding:.6rem 0;font-weight:600}
+.site-builder .site-actions{position:static;background:var(--bg,#fff);padding:1rem 0;z-index:2;flex-wrap:wrap}
+@media(max-width:600px){.site-builder .site-page-head{align-items:flex-start;gap:.6rem;flex-direction:column}.site-builder .site-page-head .row{flex-wrap:wrap}.site-builder .site-tabs{gap:.25rem}.site-builder .site-tabs button{font-size:.8rem;padding:.6rem}.site-builder .site-actions button{min-height:44px}.site-builder .site-footer-row{display:flex;flex-direction:column;align-items:stretch}}
+
+@media(max-width:600px){.site-builder .site-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));overflow:visible}.site-builder .site-tabs button{white-space:normal;line-height:1.25;min-width:0}.site-builder .site-actions{margin-bottom:1rem}}
+
+/* Pending pasted references occupy the attachment row until upload completes. */
+.interview-images .image-upload-placeholder{display:flex;align-items:center;min-height:64px;padding:12px 16px;color:var(--muted);border:1px dashed var(--line);border-radius:8px;font-size:.8rem}
+.interview-images [data-image-status]:empty{display:none}

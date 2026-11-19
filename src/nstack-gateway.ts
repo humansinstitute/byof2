@@ -1,3 +1,4 @@
+import {interviewGatewayBodyLimit} from '../integration/nstack-files';
 import {timingSafeEqual} from 'node:crypto';
 import {hash,HttpError,need} from './auth';
 import {boundedJson,readGatewayToken} from '../integration/nstack-transport';
@@ -6,7 +7,7 @@ import type {NStackConnection,NStackRequest,NStackFiles} from './nstack';
 export const gatewayMigrationSql='CREATE TABLE byo_documents (id text PRIMARY KEY, collection text NOT NULL, row_id text NOT NULL, data jsonb NOT NULL, UNIQUE (collection, row_id))';
 export const gatewayMigration={version:'byo-documents-v1',checksum:'sha256:'+hash(gatewayMigrationSql),sql:gatewayMigrationSql};
 export type GatewayBinding=NStackConnection&{installationId:string};
-export type GatewayOptions={bindings:GatewayBinding[];token:()=>string;broker:(installationId:string,request:{method:string;path:string;body?:unknown})=>Promise<Response>;fetchImpl?:(input:any,init?:RequestInit)=>Promise<Response>;files?:NStackFiles};
+export type GatewayOptions={bindings:GatewayBinding[];token:()=>string;broker:(installationId:string,request:{method:string;path:string;body?:unknown})=>Promise<Response>;fetchImpl?:(input:any,init?:RequestInit)=>Promise<Response>;files?:NStackFiles;interviewFiles?:NStackFiles};
 const validCollection=/^byo_(?:[a-f0-9]{48}|connection_probe)$/;
 function sameConnection(a:NStackConnection,b:NStackConnection){return ['endpoint','serviceNpub','workspaceOwnerNpub','appNpub'].every(k=>a[k as keyof NStackConnection]===b[k as keyof NStackConnection]);}
 export function createNStackGateway(options:GatewayOptions){
@@ -26,20 +27,21 @@ export function createNStackGateway(options:GatewayOptions){
   const b=request.body as any;need(b&&Object.keys(b).every(k=>['row_id','visibility','data','metadata'].includes(k))&&b.visibility==='private'&&typeof b.row_id==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(b.row_id)&&b.data?.byo===1&&Buffer.byteLength(JSON.stringify(b))<=128*1024,400,'Invalid immutable document');
   const id=hash(collection+':'+b.row_id);const result=await call('POST','/tables/byo_documents/rows',{id,data:{collection,row_id:b.row_id,data:b.data}});need(result.row?.id===id&&result.row.collection===collection,502,'Invalid insertion receipt');return {workspace_owner_npub:binding!.workspaceOwnerNpub,app_npub:binding!.appNpub,collection,row:{collection,row_id:b.row_id,data:result.row.data}};
  }
- async function files(b:any){
-  if(b.operation==='status'){need(b.connection,400,'Exact file connection required');const binding=options.bindings.find(x=>sameConnection(x,b.connection));need(binding,403,'File connection is not approved');return {available:!!options.files&&await options.files.available(b.connection)};}
-  need(options.files&&['put','get'].includes(b.operation),501,'Managed files require an approved storage custody binding');
+ async function files(b:any,interview=false){
+  const adapter=interview?options.interviewFiles:options.files;const registry=interview?'byo_interview_file_bindings':'byo_file_bindings';
+  if(b.operation==='status'){need(b.connection,400,'Exact file connection required');const binding=options.bindings.find(x=>sameConnection(x,b.connection));need(binding,403,'File connection is not approved');return {available:!!adapter&&await adapter.available(b.connection)};}
+  need(adapter&&['put','get'].includes(b.operation),501,'Managed files require an approved storage custody binding');
   const binding=options.bindings.find(x=>sameConnection(x,b.connection));need(binding,403,'File connection is not approved');
   const input=b.input;need(input&&/^[a-f0-9]{64}$/.test(input.namespaceHash),400,'Exact file namespace required');
   const call=async(method:string,path:string,body?:unknown)=>{const r=await options.broker(binding!.installationId,{method,path,...(body===undefined?{}:{body})});const value=await boundedJson(r);need(r.ok,[403,404,409].includes(r.status)?r.status:502,'Remote file registry rejected');need(value.workspace_owner_npub===binding!.workspaceOwnerNpub&&value.app_npub===binding!.appNpub,502,'File registry namespace mismatch');return value;};
-  if(b.operation==='put'){const receipt=await options.files!.put(b.connection,input);await call('POST','/tables/byo_documents/rows',{id:'file:'+receipt.objectId,data:{collection:'byo_file_bindings',row_id:receipt.objectId,data:{namespaceHash:input.namespaceHash,sha256:receipt.sha256,size:receipt.size}}});return receipt;}
+  if(b.operation==='put'){need(!interview||['image/png','image/jpeg'].includes(input.contentType),400,'Interview image type required');const receipt=await adapter!.put(b.connection,input);const rowId=(interview?'image:':'file:')+receipt.objectId;try{await call('POST','/tables/byo_documents/rows',{id:rowId,data:{collection:registry,row_id:receipt.objectId,data:{namespaceHash:input.namespaceHash,sha256:receipt.sha256,size:receipt.size}}});}catch(error){if(!(error instanceof HttpError)||error.status!==409)throw error;const existing=await call('GET','/tables/byo_documents/rows/'+rowId);need(existing.row?.collection===registry&&existing.row.row_id===receipt.objectId&&existing.row.data?.namespaceHash===input.namespaceHash&&existing.row.data?.sha256===receipt.sha256&&existing.row.data?.size===receipt.size,409,'File registry retry mismatch');}return receipt;}
   need(typeof input.objectId==='string'&&/^[a-f0-9-]{36}$/.test(input.objectId),400,'Exact file object required');
-  const row=await call('GET','/tables/byo_documents/rows/file:'+input.objectId);need(row.row?.collection==='byo_file_bindings'&&row.row.data?.namespaceHash===input.namespaceHash,403,'File does not belong to this namespace');return options.files!.get(b.connection,input);
+  const row=await call('GET','/tables/byo_documents/rows/'+(interview?'image:':'file:')+input.objectId);need(row.row?.collection===registry&&row.row.data?.namespaceHash===input.namespaceHash,403,'File does not belong to this namespace');return adapter!.get(b.connection,input);
  }
  return {execute,async fetch(req:Request){try{
-  const path=new URL(req.url).pathname;if(path==='/health'&&req.method==='GET')return Response.json({ok:true,service:'byo-nstack-gateway',protocol:1});need(['/v1/data','/v1/files'].includes(path)&&req.method==='POST',404,'Not found');
+  const path=new URL(req.url).pathname;if(path==='/health'&&req.method==='GET')return Response.json({ok:true,service:'byo-nstack-gateway',protocol:1});need(['/v1/data','/v1/files','/v1/interview-images'].includes(path)&&req.method==='POST',404,'Not found');
   const supplied=req.headers.get('authorization')||'',expected='Bearer '+options.token();need(Buffer.byteLength(supplied)===Buffer.byteLength(expected)&&timingSafeEqual(Buffer.from(supplied),Buffer.from(expected)),401,'Storage gateway capability required');
-  const b=await boundedJson(req as unknown as Response,path==='/v1/files'?512*1024:160*1024);if(path==='/v1/files')return Response.json(await files(b),{headers:{'cache-control':'no-store'}});need(b&&Object.keys(b).sort().join(',')==='connection,request'&&b.connection&&b.request,400,'Scoped request required');const value=await execute(b.connection,b.request);return Response.json(value,{headers:{'cache-control':'no-store'}});
+  const b=await boundedJson(req as unknown as Response,path==='/v1/interview-images'?interviewGatewayBodyLimit:path==='/v1/files'?512*1024:160*1024);if(path==='/v1/files'||path==='/v1/interview-images')return Response.json(await files(b,path==='/v1/interview-images'),{headers:{'cache-control':'no-store'}});need(b&&Object.keys(b).sort().join(',')==='connection,request'&&b.connection&&b.request,400,'Scoped request required');const value=await execute(b.connection,b.request);return Response.json(value,{headers:{'cache-control':'no-store'}});
  }catch(error){return Response.json({error:error instanceof HttpError?error.message:'Storage gateway unavailable'},{status:error instanceof HttpError?error.status:502,headers:{'cache-control':'no-store'}});}}};
 }
 
