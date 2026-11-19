@@ -26,7 +26,7 @@ export function startDispatcher(store:Store,env=process.env,createClient:typeof 
     const submitted=await client.submit(pipelineJobInput(j),j.id);
     const r=submitted.response as any;const runId=r.runId||r.run?.id||r.id;
     if(typeof runId!=='string')throw Error('Pipeline did not return a run reference');
-    store.transaction(()=>{const current=store.get('job',j.id)!;if(['dispatching','uncertain'].includes(current.status))store.put('job',{...current,runId,definitionId:cfg.definitionId,status:'running',progress:'Agent working',dispatchReceipt:submitted.receipt});});
+    store.transaction(()=>{const current=store.get('job',j.id)!;if(['dispatching','uncertain'].includes(current.status))store.put('job',{...current,runId,definitionId:cfg.definitionId,status:'running',progress:current.kind==='interview'?'Your designer is working on that now':'Your builder is working on that now',dispatchReceipt:submitted.receipt});});
    }catch(e){store.transaction(()=>{const current=store.get('job',j.id)!;if(!['dispatching','uncertain'].includes(current.status))return;store.put('job',{...current,status:'uncertain',error:e instanceof Error?e.message:'Pipeline delivery uncertain',progress:'Delivery needs recovery; retry uses the same request identity'});});}
   }
   for(const j of store.all('job').filter(j=>j.status==='running'&&j.runId&&Date.now()-(j.lastPollAt||0)>15000)){
@@ -34,7 +34,7 @@ export function startDispatcher(store:Store,env=process.env,createClient:typeof 
    try{const state=await client.poll(j.runId);const delivery=await client.delivery(j.runId);
     if(shouldRetryDelivery(j,(delivery.response as any).delivery)){await client.retryDelivery(j.runId);const fresh=store.get('job',j.id)!;if(fresh.status==='running')store.put('job',{...fresh,lastDeliveryRetryAt:Date.now(),progress:'Signed result delivery requeued; original run preserved'});}
     const current=store.get('job',j.id)!;if(current.status!=='running')continue;
-    store.put('job',{...current,lastPollAt:Date.now(),pipelineState:state.response,deliveryState:delivery.response,progress:'Agent run checked; waiting for its signed result'});
+    store.put('job',{...current,lastPollAt:Date.now(),pipelineState:state.response,deliveryState:delivery.response,progress:current.kind==='interview'?'Your designer is working on that now':'Your builder is working on that now'});
    }catch(e){const current=store.get('job',j.id)!;if(current.status==='running')store.put('job',{...current,lastPollAt:Date.now(),pollError:e instanceof Error?e.message:'Recovery check failed'});}
   }
 

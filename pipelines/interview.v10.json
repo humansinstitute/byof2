@@ -1,0 +1,109 @@
+{
+  "name": "byofreedom-interview-v10",
+  "version": 10,
+  "enabled": true,
+  "description": "Scoped workshop interview with reference-first starter replies, complete saved designs and independent reply delivery.",
+  "steps": [
+    {
+      "name": "Prepare scoped interview",
+      "type": "code",
+      "function": "byofreedom.prepareInterview.v9",
+      "input": {
+        "pick": {
+          "job": "$.job"
+        }
+      },
+      "assign": "$.nativeRequest",
+      "description": "Pin current design, source/image IDs and actual NStack capability/permission context.",
+      "display": {
+        "out": [
+          {
+            "label": "Sources",
+            "path": "$.scopedInterview.sources",
+            "format": "records"
+          },
+          {
+            "label": "Reference images",
+            "path": "$.scopedInterview.attachments",
+            "format": "records"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Interview with source and image tools",
+      "type": "code",
+      "function": "session.scopedInterviewTurn.v1",
+      "input": {
+        "pick": {
+          "agent": "$.nativeRequest.agent",
+          "executionProfile": "$.nativeRequest.executionProfile",
+          "conversationKey": "$.nativeRequest.conversationKey",
+          "requestId": "$.nativeRequest.requestId",
+          "projectId": "$.nativeRequest.projectId",
+          "durationMs": "$.nativeRequest.durationMs",
+          "prompt": "$.nativeRequest.prompt",
+          "scopedInterview": "$.nativeRequest.scopedInterview"
+        }
+      },
+      "assign": "$.turn",
+      "description": "Await real native completion in the reviewed scoped-interview profile; two bounded web/image reads, no host or broker tools.",
+      "display": {
+        "out": [
+          {
+            "label": "Status",
+            "path": "$.status",
+            "format": "text"
+          },
+          {
+            "label": "Sources inspected",
+            "path": "$.output.sourceReceipts",
+            "format": "records"
+          }
+        ]
+      },
+      "activityWebhook": {
+        "url": "https://byo-freedom.b.otherstuff.ai/api/agent-activity",
+        "correlation": {
+          "jobId": "$.job.id",
+          "requestId": "$.job.requestId",
+          "projectId": "$.job.projectId",
+          "designId": "$.job.designId",
+          "conversationId": "$.job.conversationId"
+        }
+      }
+    },
+    {
+      "name": "Deliver reply and optional design",
+      "type": "code",
+      "function": "byofreedom.finishInterview.v5",
+      "input": {
+        "pick": {
+          "turn": "$.turn",
+          "priorSourceReceipts": "$.job.context.priorSourceReceipts",
+          "expectedAttachments": "$.job.context.attachments"
+        }
+      },
+      "description": "Retain completed scoped reply and host receipts independently from design acceptance; no prose-format validation.",
+      "display": {
+        "out": [
+          {
+            "label": "Design title",
+            "path": "$.snapshot.title",
+            "format": "text"
+          },
+          {
+            "label": "Reply",
+            "path": "$.response",
+            "format": "text"
+          },
+          {
+            "label": "Sources inspected",
+            "path": "$.research.receipts",
+            "format": "records"
+          }
+        ]
+      }
+    }
+  ]
+}

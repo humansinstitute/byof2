@@ -11,6 +11,7 @@ ENV NODE_ENV=production PORT=3000 DATABASE_PATH=/app/data/byo.sqlite
 COPY --from=build /app/package.json /app/bun.lock ./
 RUN bun install --production --frozen-lockfile
 COPY --from=build /app/src ./src
+COPY --from=build /app/examples ./examples
 COPY --from=build /app/integration ./integration
 COPY --from=build /app/pipelines ./pipelines
 COPY --from=build /app/public ./public

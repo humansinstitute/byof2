@@ -1,0 +1,20 @@
+{
+  "bitcoin-will": {
+    "catalogVersion": 1,
+    "catalogHash": "8add7b08d71ea727763e93882f9196edc14d92c8f20cef872c12bff85feb7f0c",
+    "packageHash": "2d289bf762d06a7d1892b2e1a350a9ff2f6606c9d13a6ab7b09a8b6d0ed12d34",
+    "documentHash": "3e8f1580ec0fb8df50055ccd8ae86fd64ae75e6645b74a576ed3787568709f22"
+  },
+  "inflation": {
+    "catalogVersion": 1,
+    "catalogHash": "e893ff6d6b06d3ce04d6acdaf812692f6798126b074ab4e62e01c461a64cef5b",
+    "packageHash": "6881a3149d95d834b0765b1dce11fe5a8e5f86b4881f1dddf81fd5446dc1f315",
+    "documentHash": "ac9e733b02e460a178a82c63e187fdbf87ac5ddaf124608c010fb3d02610c2f2"
+  },
+  "hair": {
+    "catalogVersion": 1,
+    "catalogHash": "fd19032f3886199c6995f6dadd1764c606f4da48986834623b278bd3cb1c67e9",
+    "packageHash": "b173da58711247a6ac66bca1603cd7b73342e240d7b893fe429d1aeb90f0a6a7",
+    "documentHash": "b389baabecf753b72703271ac5c185bbb2d347e2fb3399f7366094ab99af572a"
+  }
+}

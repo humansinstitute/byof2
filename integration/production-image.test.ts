@@ -10,7 +10,7 @@ const enabled=process.env.BYO_DOCKER_VALIDATION_TEST==='1';
  };
  try{
   run(['build','-t',tag,'.']);
-  const output=run(['run','--rm','-e','PUBLIC_ORIGIN=https://app.example','-e','DATABASE_PATH=/tmp/acceptance.sqlite',tag,'bun','-e',`await import('./src/server.ts');const r=await fetch('http://127.0.0.1:3000/health');if(!r.ok||!(await r.json()).ok)process.exit(1);console.log('production-health-ok');process.exit(0);`]);
+  const output=run(['run','--rm','-e','PUBLIC_ORIGIN=https://app.example','-e','DATABASE_PATH=/tmp/acceptance.sqlite',tag,'bun','-e',`const {workshopCatalog}=await import('./src/workshop-catalog.ts');if(workshopCatalog().length!==3||workshopCatalog().some(e=>!e.files['index.html'].includes('<h1>')))throw Error('Missing example assets');await import('./src/server.ts');const r=await fetch('http://127.0.0.1:3000/health');if(!r.ok||!(await r.json()).ok)process.exit(1);console.log('production-health-ok');process.exit(0);`]);
   expect(output).toContain('production-health-ok');
  }finally{Bun.spawnSync(['docker','image','rm',tag],{stdout:'ignore',stderr:'ignore'});}
 },120000);

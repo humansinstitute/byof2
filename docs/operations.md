@@ -77,3 +77,7 @@ Prefer recovery before switching the current interview grant. The server uses `I
 Install `prepare-interview.v7.ts`, `finish-interview.v5.ts` and `interview.v8.json` as new immutable versions; keep v7/finish-v4 and old grants available for in-flight work. New v8 execution requires a fresh exact-definition/function-composition grant and the reviewed native runtime described in [interview-web.md](interview-web.md). Set `INTERVIEW_WORKFLOW_VERSION=interview-v8` only with that matching configuration. Preserve both origins, callback, scoped tools, image storage settings and builder configuration. Deployment and runtime activation remain separate operator actions.
 
 `bun integration/interview-reply-browser.ts` verifies reply rendering, separate save warnings, escaping, reload and duplicate signed delivery using an in-memory app and real Chrome at desktop/phone sizes. It does not establish live native runtime acceptance. Operational screenshots/logs belong only in ignored `tmp/docs/handoffs/`.
+
+## Workshop example release
+
+The built-in example catalog uses signed administrator installation followed by the existing revision-checked workshop selection/share API. See [workshop-examples.md](workshop-examples.md) for exact payloads, immutable catalog hashes, safe existing-conversation attachment, and additive interview-v10 activation. Installation never selects, publishes or replaces organiser choices; preserve the retirement selection and all existing user work. No platform restart or new storage/execution permission is required.

@@ -31,7 +31,7 @@ test('workshop starters copy only explicitly approved material and retain idempo
  expect(store.all('job')).toHaveLength(0);
  expect(workshop.list('participant','event').filter(s=>s.entry)).toHaveLength(1);
  const own=workshop.start('participant','event',{starterId:'own',requestId:'two'});expect(own.currentSnapshotId).toBeNull();
- const idea=workshop.start('participant','event',{starterId:'bitcoin-will',requestId:'three'});expect(idea.currentSnapshotId).toBeNull();
+ expect(()=>workshop.start('participant','event',{starterId:'bitcoin-will',requestId:'three'})).toThrow('This example is unavailable');
  const share=workshop.list('participant','event')[0]!.entry!;sharing.revoke('workshop-admin','event',share.id,share.revision);
  expect(workshop.list('participant','event')[0]!.entry).toBeUndefined();
  expect(store.get('snapshot',d.currentSnapshotId)!.document).toBe('# Approved starting document');
