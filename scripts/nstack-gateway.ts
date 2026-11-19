@@ -1,7 +1,11 @@
+import {registeredAppBrokerNStackFiles} from '../integration/nstack-app-files';
+import {need} from '../src/auth';
 import {managedBrokerNStackFiles,interviewGatewayBodyLimit} from '../integration/nstack-files';
 import {createNStackGateway,managedGatewayOptions,gatewayMigration} from '../src/nstack-gateway';
 const options=managedGatewayOptions();if(process.env.BYO_NSTACK_FILES_ENABLED==='1')options.files=managedBrokerNStackFiles();
-if(process.env.BYO_INTERVIEW_STORAGE_MAX_BYTES==='2097152')options.interviewFiles=managedBrokerNStackFiles(process.env,2097152);
+const mode=process.env.BYO_INTERVIEW_STORAGE_MODE;need(mode===undefined||mode==='managed'||mode==='registered-app',503,'Unsupported interview storage mode');
+if(mode==='registered-app')options.appImageFiles=registeredAppBrokerNStackFiles(process.env,options.bindings);
+else if(process.env.BYO_INTERVIEW_STORAGE_MAX_BYTES==='2097152')options.interviewFiles=managedBrokerNStackFiles(process.env,2097152);
 // Fixed schema only, explicitly enabled for initial operator provisioning. Never accepts SQL over HTTP.
 if(process.env.BYO_NSTACK_GATEWAY_PROVISION==='1')for(const binding of options.bindings){for(const request of [{method:'POST',path:'/provision',body:{app_slug:'byo_freedom'}},{method:'POST',path:'/migrations',body:{migrations:[gatewayMigration]}}]){const response=await options.broker(binding.installationId,request);if(!response.ok){const body=await response.json().catch(()=>({}));const safe=JSON.stringify({operation:request.path,status:response.status,code:typeof body.code==='string'?body.code.slice(0,100):null,error:typeof body.error==='string'?body.error.slice(0,300):null});throw Error('BYO gateway provisioning rejected '+safe);}}}
 const gateway=createNStackGateway(options);Bun.serve({hostname:'127.0.0.1',port:Number(process.env.PORT||41008),fetch:gateway.fetch,maxRequestBodySize:interviewGatewayBodyLimit});console.log('BYO NStack managed gateway started');

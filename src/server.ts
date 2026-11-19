@@ -1,4 +1,4 @@
-import {createManagedInterviewStorage,interviewStorageConnection} from './interview-managed-storage';
+import {configuredInterviewStorage} from './interview-managed-storage';
 import {parseNStackConnectionsJSON} from './nstack';
 import {ensureDesignLifecycleBackup} from './migration-backup';
 import {createManagedNStackTransport} from '../integration/nstack-transport';
@@ -10,7 +10,7 @@ import {startDispatcher} from './dispatcher';
 import {config} from './config';
 import {Store} from './store';
 import {createApp} from './app';
-const cfg=config();mkdirSync(dirname(cfg.database),{recursive:true});materializeGatewayCredential(cfg.database);const store=new Store(cfg.database);ensureDesignLifecycleBackup(store,cfg.database);const interviewStorage=(()=>{const connection=interviewStorageConnection();if(!connection)return;const files=createManagedNStackFiles(process.env,true);if(!files)throw Error('Configured interview storage requires managed gateway URL and token file');return createManagedInterviewStorage(store,connection,files);})();const app=createApp(store,cfg,{interviewStorage,nstackTransport:createManagedNStackTransport(),nstackFiles:createManagedNStackFiles(),nstackConnections:parseNStackConnectionsJSON(process.env.BYO_NSTACK_CONNECTIONS_JSON)});
+const cfg=config();mkdirSync(dirname(cfg.database),{recursive:true});materializeGatewayCredential(cfg.database);const store=new Store(cfg.database);ensureDesignLifecycleBackup(store,cfg.database);const interviewStorage=configuredInterviewStorage(store);const app=createApp(store,cfg,{interviewStorage,nstackTransport:createManagedNStackTransport(),nstackFiles:createManagedNStackFiles(),nstackConnections:parseNStackConnectionsJSON(process.env.BYO_NSTACK_CONNECTIONS_JSON)});
 materializePipelineCredentials(cfg.database);
 startDispatcher(store);
 Bun.serve({port:cfg.port,hostname:'0.0.0.0',fetch:app.fetch,maxRequestBodySize:12*1024*1024});

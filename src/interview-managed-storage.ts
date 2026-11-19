@@ -1,3 +1,5 @@
+import {createAppGatewayNStackFiles} from '../integration/nstack-app-files';
+import {createManagedNStackFiles} from '../integration/nstack-files';
 import {ADMINS,hash,need} from './auth';
 import {connectionInput,type NStackConnection,type NStackFiles} from './nstack';
 import {createInterviewImages} from './interview-images';
@@ -35,4 +37,15 @@ export function createManagedInterviewStorage(store:Store,connection:NStackConne
   store.put('interviewImageStorage',{id:binding,imageId,owner:design.owner,designId,projectId:design.projectId,connectionHash,namespaceHash,...receipt,complete:true,completedAt:new Date().toISOString()});
   return {objectId:receipt.objectId,storage:'nstack-private' as const};
  }};
+}
+
+/** Select explicitly; unset mode preserves the existing managed/browser behavior. */
+export function configuredInterviewStorage(store:Store,env:Record<string,string|undefined>=process.env){
+ const mode=env.BYO_INTERVIEW_STORAGE_MODE;
+ need(mode===undefined||mode==='managed'||mode==='registered-app',503,'Unsupported interview storage mode');
+ const connection=interviewStorageConnection(env);
+ if(!connection){need(mode!=='registered-app',503,'Registered app interview connection required');return;}
+ const files=mode==='registered-app'?createAppGatewayNStackFiles(env):createManagedNStackFiles(env,true);
+ need(files,503,'Configured interview storage gateway required');
+ return createManagedInterviewStorage(store,connection,files!);
 }
