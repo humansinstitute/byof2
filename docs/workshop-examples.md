@@ -44,9 +44,9 @@ Repeat for `inflation` and `hair`, preserving the retirement record exactly. Use
 
 ## Existing conversations and mobile access
 
-Cards offer Open example and Use example. Personal imported conversations always expose Open example outside desktop Preview, with a full-screen phone dialog. Each starter has one concrete opening question and three editable suggestions. Starting documents and sample choices remain unconfirmed reference material.
+Cards offer Open example and Use example at the project starter gallery. Each starter has one concrete opening question and three editable suggestions. Starting documents and sample choices remain unconfirmed reference material.
 
-A workshop conversation without an imported reference offers an explicit chooser of currently available examples. It does not assume the old starter ID matches the current topic. Open example previews the selected package. Use example as reference calls the owner-authorised `POST /api/designs/:id/starter-reference` with `{entryId,expectedRevision}`. The selected entry/revision is checked atomically; active turns block a new attachment, exact retries are harmless, a different subsequent attachment conflicts. Attaching creates only the ordinary scoped import reference and an attachment receipt. It never replaces the conversation, title, messages, snapshots, current design or native session. The reference remains unconfirmed. Another participant cannot read or attach to this design.
+Opening or reopening a conversation goes directly to its saved messages and composer. No example chooser, attachment promotion or inline reference banner is inserted. Existing imported packages remain unchanged and can be opened explicitly with **Starting example** in Preview’s version controls (under **More · versions** for workshop participants). This uses the existing full-screen sandbox and scoped host-owned source links; closing returns focus to the opener. The compatibility starter-reference API remains available for history and backend safety tests, but the conversation UI does not call it. Rendering never attaches a reference or changes starter metadata.
 
 ## Native pipeline activation
 
