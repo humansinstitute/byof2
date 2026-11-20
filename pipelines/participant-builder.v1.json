@@ -1,0 +1,84 @@
+{
+  "name": "byofreedom-participant-builder-v1",
+  "version": 1,
+  "enabled": true,
+  "input": {
+    "settings": {
+      "publicOrigin": "https://byo-freedom.b.otherstuff.ai"
+    }
+  },
+  "description": "Separate isolated member-owned build and private result registration; no sandbox signing or project tools.",
+  "steps": [
+    {
+      "name": "Prepare exact participant files",
+      "type": "code",
+      "function": "byofreedom.prepareParticipantBuilder.v1",
+      "input": {
+        "pick": {
+          "job": "$.job"
+        }
+      },
+      "description": "Pin saved app context and selected static package; no host workspace.",
+      "display": {
+        "out": [
+          {
+            "label": "Conversation",
+            "path": "$.conversationKey",
+            "format": "text"
+          }
+        ]
+      },
+      "assign": "$.isolatedRequest"
+    },
+    {
+      "name": "Build in isolated Codex",
+      "type": "code",
+      "function": "session.completedTurn",
+      "input": {
+        "pick": {
+          "conversationKey": "$.isolatedRequest.conversationKey",
+          "requestId": "$.isolatedRequest.requestId",
+          "projectId": "$.isolatedRequest.projectId",
+          "executionProfile": "$.isolatedRequest.executionProfile",
+          "directory": "$.isolatedRequest.directory",
+          "durationMs": "$.isolatedRequest.durationMs",
+          "projectFiles": "$.isolatedRequest.projectFiles",
+          "prompt": "$.isolatedRequest.prompt"
+        }
+      },
+      "description": "Credential-free restricted container with bounded inference and no project tools.",
+      "display": {
+        "out": [
+          {
+            "label": "Status",
+            "path": "$.status",
+            "format": "text"
+          }
+        ]
+      },
+      "assign": "$.turn"
+    },
+    {
+      "name": "Validate and register private result",
+      "type": "code",
+      "function": "byofreedom.finishParticipantBuilder.v1",
+      "input": {
+        "pick": {
+          "job": "$.job",
+          "turn": "$.turn",
+          "settings": "$.settings"
+        }
+      },
+      "description": "Independently check allowlisted returned files and register exact job/run result; never publish site or install data.",
+      "display": {
+        "out": [
+          {
+            "label": "Reply",
+            "path": "$.response",
+            "format": "text"
+          }
+        ]
+      }
+    }
+  ]
+}

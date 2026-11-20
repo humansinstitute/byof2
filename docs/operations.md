@@ -66,7 +66,7 @@ Queued/running/uncertain/failed work is visible in app jobs. Match retry and cal
 Participant inference must not inherit host shell/filesystem/admin authority. Scope-limited publication brokers are not evidence of host filesystem isolation. Keep the real activated runtime's isolation evidence and any remaining limits explicit; do not replace it with prompt-only assurances.
 
 
-Participant **Build this now** requests currently open a private waiting conversation; they do not queue the installed native builder. Implementation message/retry APIs reject participant execution. Administrators can explicitly handle a requested conversation, whose messages are then visible to its creator; historical administrator-created chats remain private. Activating automatic participant builds requires a separately reviewed isolated runtime and its actual model/credential provisioning, not a permission toggle or reuse of operator host authority. Preserve this fail-closed state during deployment until that prerequisite is implemented and verified.
+Participant builds default off per project. Organisers can save a revision-checked option; execution remains unavailable until the separately provisioned isolated runtime is configured. Admin native building stays unchanged. See [participant-builds.md](participant-builds.md) for exact source/config/runtime distinctions, revocation behavior, limits, activation and acceptance. Keep participant pipeline fields absent in a source-only release; no platform restart is authorised by these instructions.
 
 ## Recover a completed interview rejected by an older finisher
 

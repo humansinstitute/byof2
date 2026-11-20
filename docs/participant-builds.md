@@ -1,0 +1,58 @@
+# Participant builds
+
+Organisers can allow signed project members to build and iterate their own designs through **Project settings → Allow members to build and iterate their own designs**. The option defaults off for new and legacy projects. Saving it does not provision a runtime. Settings explicitly show when the isolated participant runtime is unconfigured; the admin native builder remains available independently.
+
+`GET /api/projects/:id/participant-builds` requires membership. `PATCH` requires an administrator and exactly the intended `{enabled: boolean, expectedRevision: number}`. The combined project `PATCH /api/projects/:id` accepts `participantBuildsEnabled` plus `expectedParticipantBuildsRevision` and atomically saves validated metadata and permission; invalid metadata or a stale permission revision changes neither. Metadata-only edits preserve permission. Read `participantBuildsRevision` first; stale revisions return 409. The project, design and implementation reads include actor-specific `buildAvailable`/`buildBlocker`, plus separate `participantRuntimeConfigured`, `participantBuildAvailable` and desired setting/revision. The general `/api/me` descriptor does not promise project-specific execution.
+
+Initial builds, legacy implementation conversations, follow-up messages and failed-job retries enforce membership, design ownership and conversation creator ownership on the server. Body role/owner/profile claims provide no authority. An unavailable or disabled participant initial build opens the existing private waiting conversation without a job; members can send it an implementation message after availability is enabled. Immutable idempotency receipts reopen the original initial request rather than silently converting an old waiting request into execution. A new initial request needs a new request ID.
+
+Only participant jobs created through the approved path carry `requestedExecutionProfile: isolated-codex` and `workflowVersion: participant-builder-v1`. They use a separate immutable remote pipeline binding. No participant job falls back to the admin builder, native host directory, operator session or worker-selected execution profile. A participant cannot retry a historical trusted-host job. A failed isolated job with a known accepted run returns 409 on retry with guidance to start a new build from the saved design or ask the organiser to reconcile. Follow-up messages in that failed native conversation are held too: the runtime may retain an unresolved native request and cannot safely accept another turn on that key. A new build creates a distinct implementation conversation/key while preserving the failed job. It never resets a terminal run into perpetual polling. Only unattempted predispatch failures with no run can retry the original immutable input if permission/admission still allow it. Admin builder-v6 and native interviews keep their existing workflow/configuration and authority.
+
+Admission is atomic within the product store: at most two active isolated participant jobs globally and one per owner/design. Busy admission returns 429 without adding a message/job. Uncertain jobs count against capacity until reconciled. This is a BYO application limit, not a platform-wide scheduler across other applications.
+
+## Revocation
+
+Turning the option off stops new messages and retries. Dispatcher rechecks permission, participant membership and design/conversation ownership immediately before first submission; an undispatched queued job becomes failed with `participant_execution_revoked`. A request already attempted remotely may have been accepted even if its response was lost. Its original binding and request identity remain preserved. If acceptance is unknown and permission has been revoked, dispatcher holds it uncertain without resubmitting; an organiser must reconcile possible original acceptance. A known accepted run may complete and register its private result. Revocation does not terminate an accepted isolated turn, replay it, delete completed work, revoke access to owned history, or publish anything. Membership removal separately denies participant reads and mutations under existing membership checks. Returned versions remain stored for later authorised access.
+
+## Supported isolated cycle
+
+The additive `pipelines/participant-builder.v1.json` uses:
+
+1. `byofreedom.prepareParticipantBuilder.v1`: returns `/workspace`, `executionProfile: isolated-codex`, a 120-second deadline, immutable selected files and `.byo/context.json`/SDK. No host workdir, publication script, signing credential or project tool crosses the boundary. The runtime replaces each turn's project snapshot; private native continuity remains runtime-managed. Stale `publication.json` is absent on each new input.
+2. The existing supported `session.completedTurn`: selects the actual isolated runtime. Autopilot enforces its container, snapshot limits, native continuity and inference gateway. There is no native host fallback.
+3. `byofreedom.finishParticipantBuilder.v1`: accepts only the exact completed request/project/conversation/run and actual isolated output. A model may request registration with `publication.json` containing only `{title, paths}`. The finisher selects at most 500 regular UTF-8 static files, rejects hidden/context/runtime/continuity paths, traversal, duplicates, binary encodings and conflicting paths, and bounds the package to 10 MiB. It discards model validation claims. A pinned Docker validator independently compiles inline and packaged JavaScript and checks HTML/static HTTP serving. This is syntax/smoke validation, not comprehensive functional acceptance. Only the trusted control-plane finisher can use the existing worker signing custody to register an exact job/run/actor/snapshot private result. No signing authority reaches the isolated agent.
+
+An answer without a registration manifest creates no version. A successful registration records a build-result receipt even if identical bytes reuse an earlier immutable version. Public site selection, library sharing and exact-version NStack data installation remain administrator-only. The SDK and `byo-data.json` describe requested permissions; generating them never installs data policies. Existing NStack capability/limit context remains authoritative, including honest unavailable states.
+
+## Activation checklist for the deployment manager
+
+Source validation, installing pipeline functions, provisioning the model runtime and live acceptance are separate steps. Do not enable the app execution flags until the actual deployed runtime prerequisites are verified. This document grants no deployment, installation, credential change or platform restart authority.
+
+1. Preserve the exact admin/interview definitions, installed function hashes, execution grants, callback/origin pins, NStack settings, all unrelated environment values and the persistent data volume. Back up SQLite consistently using the existing operations procedure. Do not replace the native builder with the participant definition.
+2. Review the active Autopilot source `src/sessions/completed-turn-contract.ts`, `isolated-completed-turn-runtime.ts`, `isolated-turn-store.ts` and `src/isolation/project-profile.ts`. Actual isolated execution requires dedicated **Autopilot-side** `WINGMAN_ISOLATED_CODEX_IMAGE=sha256:<64-hex audited local image ID>`, `WINGMAN_ISOLATED_CODEX_MODEL=<fixed authorised model>` and `WINGMAN_ISOLATED_CODEX_API_KEY=<dedicated authorised credential>`. These never belong in BYO, Git, browser code or a participant snapshot. Ambient provider credentials are not a fallback. The image must be audited, present locally and have no declared volumes. Linux cgroup/seccomp resource enforcement, disabled external network, read-only root, non-root UID and bounded credential-free inference must be proven using the active runtime. A source checkout or Docker package validator alone does not prove this. Changing the active platform environment may require separately authorised process activation/restart; do not restart under this checklist.
+3. Review and install the two new immutable function versions and `participant-builder.v1.json` through the supported pipeline API/CLI. Obtain their actual installed hashes and definition ID; issue a new exact definition/function-composition execution grant with the existing exact app identity, origin and callback. Do not reuse or widen admin/interview grants. The isolated step has **no `agentTools`**. Trusted finisher dependencies are Bun, Docker with the fixed validator digest, supported signing custody and its existing exact worker signer. Verify the canonical finisher bytes installed, including its host-side signer module import; a portable public export is not proof of the installed function's identity.
+4. Configure **BYO-side** `PARTICIPANT_BUILDER_PIPELINE_CONFIG` as a separate `RemotePipelineConfig` with exact `origin`, `clientOrigin`, `installationId`, `appId`, `ownerNpub`, newly installed `definitionId`, `callbackUrl`, `appPubkey` and a server-only `credentialFile`. Alternatively provide only its opaque `PARTICIPANT_BUILDER_PIPELINE_CREDENTIAL` through managed configuration; startup materializes `execution-grants/participant_builder.capability` mode0600 under the preserved data volume. Set `PARTICIPANT_BUILDER_RUNTIME=isolated-codex-v1` only after provisioning/acceptance review. These are explicit operator configuration assertions, not an automatic remote health probe or isolation attestation. Leave both participant fields absent for a source-only release with honest runtime unavailable. Existing `INTERVIEW_*` and `BUILDER_*` values stay exact.
+5. Deploy the reviewed BYO commit through the manager's normal exact-target process. Keep the private canonical history out of public GitHub; use the separate reviewed sanitized snapshot publication process. Verify exact image/version/browser assets and saved configuration/volume readback. Set no organiser option globally: each project needs its own admin-signed revision-checked choice.
+6. With an actual signed member on the exact deployed origin, enable a test project's option, build its own saved design, obtain the actual isolated completed-turn receipt and private registration, exercise the result, then send a follow-up producing the next private version. Verify native continuity, actor/snapshot/run provenance, independent Docker evidence, outsider/other-member denials, setting conflicts, retry behavior, capacity, revocation before dispatch and completion after accepted dispatch. Confirm no project-site publication, library share or storage installation occurred. Repeat affected phone/desktop interactions. Only this proves hosted model acceptance.
+
+To freeze reproducible source pins before installation:
+
+```sh
+shasum -a 256 pipelines/participant-builder.v1.json \
+  pipelines/functions/prepare-participant-builder.v1.ts \
+  pipelines/functions/finish-participant-builder.v1.ts
+```
+
+Record actual installed pins/grant IDs privately on the task; never substitute source hashes for installed composition receipts.
+
+## Local verification
+
+```sh
+bun install --frozen-lockfile
+bun run check
+BYO_DOCKER_VALIDATION_TEST=1 bun test
+bun run build
+bun integration/participant-builds-browser.ts
+```
+
+The browser runner uses in-memory SQLite, synthetic identities, real signed requests and Chrome at phone/desktop widths. Result registrations and pipeline callbacks are synthetic. It neither invokes a hosted model nor proves the deployed isolated runtime. Its screenshots/evidence stay ignored under `tmp/docs/handoffs/participant-builds/`. Existing native interview/admin builder tests remain regressions.

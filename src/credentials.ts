@@ -3,7 +3,7 @@ import {dirname,join} from 'node:path';
 /** Opaque installation execution grants only. Never provider or Nostr keys. */
 export function materializePipelineCredentials(databasePath:string,env=process.env){
  const directory=join(dirname(databasePath),'execution-grants');
- for(const kind of ['INTERVIEW','BUILDER']){
+ for(const kind of ['INTERVIEW','BUILDER','PARTICIPANT_BUILDER']){
   const token=env[`${kind}_PIPELINE_CREDENTIAL`];if(!token)continue;
   if(!env[`${kind}_PIPELINE_CONFIG`])throw Error(`Missing ${kind} pipeline public configuration`);
   if(token.length>12000||/[\r\n]/.test(token))throw Error('Invalid opaque installation grant');
